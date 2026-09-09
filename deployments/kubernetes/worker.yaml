@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-worker
+  namespace: myapp
+  labels: { app: myapp, component: worker }
+spec:
+  # The outbox relay is safe to scale (rows are claimed atomically); start at 1.
+  replicas: 1
+  selector:
+    matchLabels: { app: myapp, component: worker }
+  template:
+    metadata:
+      labels: { app: myapp, component: worker }
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/example/myapp-worker:latest
+          envFrom:
+            - configMapRef: { name: myapp-config }
+            - secretRef: { name: myapp-secrets }
+          resources:
+            requests: { cpu: "50m", memory: "96Mi" }
+            limits: { cpu: "300m", memory: "192Mi" }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }

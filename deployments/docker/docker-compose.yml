@@ -1,0 +1,80 @@
+# Local infrastructure for the "production profile" (Postgres + Kafka).
+# The app itself runs fine with `make run-api` and no infra at all.
+#
+#   docker compose -f deployments/docker/docker-compose.yml up -d
+#
+# Then run the app against it:
+#   DATABASE_URL=postgres://myapp:myapp@localhost:5432/myapp?sslmode=disable \
+#   KAFKA_BROKERS=localhost:9092 make run-api
+
+name: myapp
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: myapp
+      POSTGRES_PASSWORD: myapp
+      POSTGRES_DB: myapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional: run the app in-compose instead of on the host.
+  api:
+    build:
+      context: ../..
+      args: { TARGET: api }
+    depends_on:
+      postgres: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://myapp:myapp@postgres:5432/myapp?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+      LOG_FORMAT: json
+    ports:
+      - "8080:8080"
+    profiles: ["app"]
+
+  worker:
+    build:
+      context: ../..
+      args: { TARGET: worker }
+    depends_on:
+      postgres: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://myapp:myapp@postgres:5432/myapp?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+      LOG_FORMAT: json
+    profiles: ["app"]
+
+volumes:
+  pgdata:

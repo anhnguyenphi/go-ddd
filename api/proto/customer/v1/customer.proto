@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+// Customer context — gRPC delivery contract and integration-event schemas.
+package customer.v1;
+
+option go_package = "github.com/example/myapp/api/proto/customer/v1;customerv1";
+
+import "google/protobuf/timestamp.proto";
+
+// ---- gRPC service (mirrors interfaces/http) --------------------------------
+
+service CustomerService {
+  rpc CreateCustomer(CreateCustomerRequest) returns (CreateCustomerResponse);
+  rpc GetCustomer(GetCustomerRequest) returns (Customer);
+  rpc ListCustomers(ListCustomersRequest) returns (ListCustomersResponse);
+  rpc ChangeCustomerEmail(ChangeCustomerEmailRequest) returns (ChangeCustomerEmailResponse);
+}
+
+message Customer {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+  string status = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message CreateCustomerRequest {
+  string name = 1;
+  string email = 2;
+}
+message CreateCustomerResponse { string id = 1; }
+
+message GetCustomerRequest { string id = 1; }
+
+message ListCustomersRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+message ListCustomersResponse {
+  repeated Customer items = 1;
+  int32 total = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message ChangeCustomerEmailRequest {
+  string id = 1;
+  string email = 2;
+}
+message ChangeCustomerEmailResponse {}
+
+// ---- integration events (published on the bus) ----------------------------
+// Topic (bounded-context oriented): customer.v1.events
+
+message CustomerCreatedV1 {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message CustomerEmailChangedV1 {
+  string id = 1;
+  string old_email = 2;
+  string new_email = 3;
+}
+
+message CustomerDeactivatedV1 {
+  string id = 1;
+  string reason = 2;
+}

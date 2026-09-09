@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myapp-config
+  namespace: myapp
+data:
+  APP_ENV: "prod"
+  HTTP_ADDR: ":8080"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  KAFKA_GROUP_ID: "myapp"
+  OUTBOX_POLL_INTERVAL: "1s"
+  OUTBOX_BATCH_SIZE: "100"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: myapp-secrets
+  namespace: myapp
+type: Opaque
+stringData:
+  # Replace via your secret manager / sealed-secrets in real clusters.
+  DATABASE_URL: "postgres://myapp:myapp@postgres:5432/myapp?sslmode=disable"
+  KAFKA_BROKERS: "kafka:9092"

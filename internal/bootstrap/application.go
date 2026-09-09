@@ -1,0 +1,124 @@
+// Package bootstrap is the application's composition root. It is the only place
+// where concrete implementations are chosen and wired; every other package
+// depends on interfaces. cmd/* entrypoints call Build and then run the pieces
+// they need.
+package bootstrap
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+
+	"github.com/example/myapp/internal/eventbus"
+	"github.com/example/myapp/internal/eventbus/outbox"
+	"github.com/example/myapp/internal/platform/config"
+	"github.com/example/myapp/internal/platform/httpx"
+	"github.com/example/myapp/internal/platform/observability"
+)
+
+// Application is the fully wired system. Not every field is used by every
+// process: the API serves Handler; the worker runs RunBackground.
+type Application struct {
+	Config config.Config
+	Logger *slog.Logger
+
+	handler     http.Handler
+	bus         eventbus.Bus
+	relay       *outbox.Relay
+	persistence persistence
+}
+
+// Build constructs the application graph from configuration.
+func Build(ctx context.Context, cfg config.Config) (*Application, error) {
+	logger := observability.NewLogger(cfg.Log)
+	logger.Info("building application", "env", cfg.Env)
+
+	bus := newBus(cfg, logger)
+
+	// Transactional outbox: domain-event publication writes here (inside the
+	// request transaction); the relay forwards to the bus at-least-once.
+	outboxStore := outbox.NewMemoryStore()
+	outboxPub := outbox.NewPublisher(outboxStore)
+	relay := outbox.NewRelay(outboxStore, bus, logger, outbox.Options{
+		Interval:  cfg.Outbox.PollInterval,
+		BatchSize: cfg.Outbox.BatchSize,
+	})
+
+	p, err := newPersistence(ctx, cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	mods := newModules(logger, p, outboxPub)
+
+	mux := http.NewServeMux()
+	registerOps(mux, p)
+	mods.registerHTTP(mux)
+	if err := mods.registerSubscriptions(bus); err != nil {
+		_ = p.close()
+		return nil, err
+	}
+
+	handler := httpx.Apply(mux,
+		httpx.RequestID(logger),
+		httpx.AccessLog(),
+		httpx.Recover(),
+	)
+
+	return &Application{
+		Config:      cfg,
+		Logger:      logger,
+		handler:     handler,
+		bus:         bus,
+		relay:       relay,
+		persistence: p,
+	}, nil
+}
+
+// HTTPHandler is the root handler for the API process.
+func (a *Application) HTTPHandler() http.Handler { return a.handler }
+
+// RunBackground runs the outbox relay (and, later, any in-process consumers)
+// until ctx is cancelled. The API runs this in a goroutine; the worker runs it
+// as its main loop.
+func (a *Application) RunBackground(ctx context.Context) error {
+	return a.relay.Run(ctx)
+}
+
+// DrainOutbox performs a single synchronous relay pass. Useful in tests and to
+// flush pending events on shutdown.
+func (a *Application) DrainOutbox(ctx context.Context) (int, error) {
+	return a.relay.Drain(ctx)
+}
+
+// Close releases resources (DB pool, bus connections).
+func (a *Application) Close() error {
+	if c, ok := a.bus.(interface{ Close() error }); ok {
+		_ = c.Close()
+	}
+	return a.persistence.close()
+}
+
+// registerOps mounts liveness/readiness probes.
+func registerOps(mux *http.ServeMux, p persistence) {
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if p.db != nil {
+			if err := p.db.PingContext(r.Context()); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable,
+					map[string]string{"status": "unavailable", "detail": err.Error()})
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	})
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}

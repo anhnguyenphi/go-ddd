@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    {{- include "myapp.labels" . | nindent 4 }}
+data:
+  {{- range $k, $v := .Values.config }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-secrets
+  labels:
+    {{- include "myapp.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- range $k, $v := .Values.secrets }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

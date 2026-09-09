@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker
+  labels:
+    {{- include "myapp.labels" . | nindent 4 }}
+    component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "myapp.labels" . | nindent 8 }}
+        component: worker
+    spec:
+      containers:
+        - name: worker
+          image: {{ include "myapp.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Same image, worker entrypoint (build with --build-arg TARGET=worker
+          # or use a separate image/tag).
+          command: ["/app/app"]
+          envFrom:
+            - configMapRef: { name: {{ .Release.Name }}-config }
+            - secretRef: { name: {{ .Release.Name }}-secrets }
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}

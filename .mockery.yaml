@@ -1,0 +1,45 @@
+# mockery v2 (pinned to v2.53.7 in scripts/install-tools.sh).
+#
+#   make mocks        # regenerate
+#
+# Mocks are written to a `mocks/` sub-package next to each interface and use
+# testify/mock — running this the first time adds testify to go.mod.
+with-expecter: true
+dir: "{{.InterfaceDir}}/mocks"
+outpkg: "mocks"
+filename: "{{.InterfaceName}}.go"
+mockname: "{{.InterfaceName}}"
+disable-version-string: true
+# Pre-adopt mockery v3 defaults (silences deprecation warnings).
+resolve-type-alias: false
+issue-845-fix: true
+
+packages:
+  github.com/example/myapp/internal/shared/application:
+    interfaces:
+      UnitOfWork:
+      DomainEventPublisher:
+      Clock:
+      IDGenerator:
+
+  github.com/example/myapp/internal/customer/domain:
+    interfaces:
+      Repository:
+
+  github.com/example/myapp/internal/customer/application:
+    interfaces:
+      ReadModel:
+
+  github.com/example/myapp/internal/eventbus:
+    interfaces:
+      Bus:
+      Publisher:
+      Subscriber:
+
+  github.com/example/myapp/internal/eventbus/outbox:
+    interfaces:
+      Store:
+
+  github.com/example/myapp/internal/notification/domain:
+    interfaces:
+      NotificationService:

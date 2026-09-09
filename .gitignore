@@ -1,0 +1,21 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Go
+/vendor/
+coverage.txt
+coverage.html
+
+# Local env / secrets
+.env
+.env.local
+configs/config.local.json
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

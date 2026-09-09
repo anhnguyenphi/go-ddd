@@ -1,0 +1,50 @@
+# golangci-lint v2 configuration (tested with v2.13.2 — see scripts/install-tools.sh).
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  # "standard" = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - revive
+    - misspell
+    - bodyclose
+    - noctx
+  exclusions:
+    generated: lax
+    # Curated upstream exclusions: silence the "every exported symbol needs a
+    # doc comment" nagging on obvious interface implementations, etc.
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - noctx      # http.Get/Post against httptest servers is fine in tests
+          - bodyclose
+      # Placeholder bounded contexts intentionally ship skeletal structs whose
+      # fields are not wired up yet.
+      - path: internal/(identity|order|payment)/
+        linters:
+          - unused
+      # shared/domain.DomainEvent is a deliberate name (it mirrors the ubiquitous
+      # language); the eventbus.Event type is the integration-event counterpart.
+      - source: 'type DomainEvent interface'
+        linters:
+          - revive
+
+formatters:
+  # gofmt/goimports moved out of `linters` in v2.
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/example/myapp

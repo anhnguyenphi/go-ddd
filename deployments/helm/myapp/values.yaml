@@ -1,0 +1,32 @@
+image:
+  repository: ghcr.io/example/myapp
+  tag: latest
+  pullPolicy: IfNotPresent
+
+api:
+  replicas: 3
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+  service:
+    port: 80
+
+worker:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { cpu: 300m, memory: 192Mi }
+
+config:
+  APP_ENV: prod
+  HTTP_ADDR: ":8080"
+  LOG_LEVEL: info
+  LOG_FORMAT: json
+  KAFKA_GROUP_ID: myapp
+  OUTBOX_POLL_INTERVAL: "1s"
+  OUTBOX_BATCH_SIZE: "100"
+
+# Provide via --set or a secret manager; never commit real values.
+secrets:
+  DATABASE_URL: ""
+  KAFKA_BROKERS: ""

@@ -36,6 +36,67 @@ configs/             Config files (env vars override everything)
 tests/               integration / contract / e2e suites
 ```
 
+### Thinking model per package
+
+When deciding where a piece of code belongs, ask the question next to that
+package rather than pattern-matching on file type:
+
+- **`cmd/`** — "How does this process start and what does it wire together?"
+- **`internal/platform/`** — "Is this a technical capability with zero business
+  meaning (config, logging, http server, db connection)?"
+- **`internal/shared/domain/`** — "Is this a DDD primitive every bounded
+  context needs (AggregateRoot, DomainEvent, base error types)?"
+- **`internal/shared/application/`** — "Is this an application-layer contract
+  (Command, Query, UnitOfWork, DomainEventPublisher) every context implements
+  the same way?"
+- **`internal/shared/infrastructure/`** — "Is this infra glue (clock, id
+  generation, tx-in-context) with no domain meaning of its own?"
+- **`internal/eventbus/`** — "How does a domain event get from one context's
+  transaction to another context's inbox — in-memory, via outbox, via Kafka?"
+- **`internal/bootstrap/`** — "Where do concrete adapters get plugged into
+  the ports each context's application layer defined?"
+- **`internal/customer/`, `internal/order/`, `internal/notification/`,
+  `internal/identity/`, `internal/payment/`** (each context, per sub-folder):
+  - `domain/` — "What are the business rules and invariants, independent of
+    any framework or database?"
+  - `application/` — "What use case am I orchestrating, and what ports
+    (interfaces) does it need from the outside world?"
+  - `infrastructure/` — "How do I fulfill the ports application defined,
+    using a real database, message bus, or external service?"
+  - `interfaces/` — "How does the outside world (gRPC, REST via gateway,
+    Kafka consumer) trigger a use case?"
+  - Ports / adapters (e.g. `customer/application`'s repository port +
+    `customer/infrastructure/persistence/{memory,postgres}`, or
+    `order/application.CustomerVerifier` +
+    `order/infrastructure/customerclient`) — "Am I defining a *port* (an
+    interface the application layer owns, describing what it needs, with no
+    mention of any concrete technology) or writing an *adapter* (a concrete
+    implementation of someone else's port, free to mention drivers, SQL,
+    gRPC clients, whatever the port hides)?" The port always lives next to
+    the code that needs it, never next to the code that satisfies it — that
+    ownership direction is what lets `infrastructure/` be swapped (memory
+    for postgres, local bus for Kafka) without `application/` or `domain/`
+    changing at all.
+  - CQRS (`customer`'s `application.ReadModel` port + its
+    `infrastructure/projections` implementation) — "Am I changing state
+    (goes through the aggregate — one write model, strongly consistent) or
+    reading it (goes through a projection shaped for the caller, only
+    eventually consistent with the last write)?" Never read through the
+    write-side aggregate, and never assume a read right after a write
+    reflects it — the projection catches up asynchronously off the same
+    integration events other contexts consume.
+- **`pkg/`** — "Is this stable and generic enough for code outside this
+  module to import?"
+- **`api/`** — "What's the versioned contract (proto/OpenAPI) that crosses a
+  process boundary?"
+- **`migrations/`** — "How does the schema evolve, and can it roll forward
+  safely?"
+- **`deployments/`** — "How does this run in a real environment (compose,
+  k8s, Helm)?"
+- **`configs/`** — "What varies per environment, and what's a safe default?"
+- **`tests/`** — "What layer of confidence am I buying — unit, integration,
+  contract, or end-to-end?"
+
 ## Dependency rule
 
 ```

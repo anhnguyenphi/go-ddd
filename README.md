@@ -58,7 +58,32 @@ package rather than pattern-matching on file type:
 - **`internal/customer/`, `internal/order/`, `internal/notification/`,
   `internal/identity/`, `internal/payment/`** (each context, per sub-folder):
   - `domain/` — "What are the business rules and invariants, independent of
-    any framework or database?"
+    any framework or database?" Broken down by what's actually in
+    `customer/domain/`:
+    - Aggregate (`customer.go`) — "What invariant must hold on *this one*
+      instance at all times?" (e.g. a customer always has a valid email).
+      Every state change is a method on the aggregate, never a field set
+      from outside — the aggregate is the only thing allowed to break its
+      own rules, which is also why it's the only thing allowed to fix them.
+    - Value objects (`email.go`, `customer_id.go`, `status.go`) — "Is this a
+      piece of data whose validity I never want to re-check once
+      constructed?" `domain.NewEmail` either returns something guaranteed
+      valid or an error — nothing downstream re-validates it.
+    - Domain events (`events/events.go`) — "What already happened that
+      other parts of this context, or other contexts entirely, might care
+      about?" Recorded on the aggregate, pulled and published after the
+      transaction commits — the aggregate doesn't know or care who's
+      listening.
+    - Repository port (`customer_repository.go`) — "What's the minimum the
+      domain needs to load/save itself?", owned here for the same reason
+      described in ports/adapters below — the domain defines the shape,
+      `infrastructure/persistence` fulfills it.
+    - Domain service (`services/email_uniqueness.go`) — "Is this a rule that
+      spans more than one aggregate instance, so no single aggregate can
+      enforce it alone?" (e.g. email uniqueness across *all* customers).
+      Kept separate from the aggregate for that reason, but still pure
+      business logic — no transactions, clocks, or IDs, unlike the command
+      handlers in `application/` that call it.
   - `application/` — "What use case am I orchestrating, and what ports
     (interfaces) does it need from the outside world?"
   - `infrastructure/` — "How do I fulfill the ports application defined,

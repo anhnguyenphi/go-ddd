@@ -29,6 +29,7 @@ func newModules(logger *slog.Logger, p persistence, outboxPub eventbus.Publisher
 	customerMod := customer.New(customer.Deps{
 		Logger:          logger,
 		Repository:      p.customerRepo,
+		ReadModel:       p.customerReadModel,
 		UnitOfWork:      p.unitOfWork,
 		OutboxPublisher: outboxPub,
 		Clock:           clock.System{},

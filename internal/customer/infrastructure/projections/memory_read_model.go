@@ -18,8 +18,18 @@ import (
 	"github.com/example/myapp/pkg/pagination"
 )
 
-// MemoryReadModel is an in-memory customer read model. In production this would
-// be a denormalised table (or a search index) updated by the same handlers.
+// ReadModel is what module.go wires: the query port plus the ability to
+// subscribe its projection handlers to the bus. MemoryReadModel and
+// PostgresReadModel both implement it, so the bootstrap can pick one per
+// environment (see internal/bootstrap/database.go) without module.go caring.
+type ReadModel interface {
+	custapp.ReadModel
+	Register(bus eventbus.Subscriber) error
+}
+
+// MemoryReadModel is an in-memory customer read model, used in the in-memory
+// persistence profile and in tests. PostgresReadModel is its production,
+// durable counterpart.
 type MemoryReadModel struct {
 	mu   sync.RWMutex
 	rows map[string]dto.Customer
@@ -30,14 +40,17 @@ func NewMemoryReadModel() *MemoryReadModel {
 	return &MemoryReadModel{rows: make(map[string]dto.Customer)}
 }
 
-var _ custapp.ReadModel = (*MemoryReadModel)(nil)
+var _ ReadModel = (*MemoryReadModel)(nil)
 
 // Register subscribes the projection's handlers to the bus.
 func (m *MemoryReadModel) Register(bus eventbus.Subscriber) error {
 	if err := bus.Subscribe(messaging.EventCustomerCreated, m.onCreated); err != nil {
 		return err
 	}
-	return bus.Subscribe(messaging.EventCustomerEmailChanged, m.onEmailChanged)
+	if err := bus.Subscribe(messaging.EventCustomerEmailChanged, m.onEmailChanged); err != nil {
+		return err
+	}
+	return bus.Subscribe(messaging.EventCustomerDeactivated, m.onDeactivated)
 }
 
 func (m *MemoryReadModel) onCreated(_ context.Context, e eventbus.Event) error {
@@ -73,6 +86,22 @@ func (m *MemoryReadModel) onEmailChanged(_ context.Context, e eventbus.Event) er
 	defer m.mu.Unlock()
 	if row, ok := m.rows[p.ID]; ok {
 		row.Email = p.NewEmail
+		m.rows[p.ID] = row
+	}
+	return nil
+}
+
+func (m *MemoryReadModel) onDeactivated(_ context.Context, e eventbus.Event) error {
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(e.Payload, &p); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if row, ok := m.rows[p.ID]; ok {
+		row.Status = "inactive"
 		m.rows[p.ID] = row
 	}
 	return nil

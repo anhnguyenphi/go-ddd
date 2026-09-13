@@ -27,6 +27,7 @@ import (
 type Deps struct {
 	Logger          *slog.Logger
 	Repository      domain.Repository
+	ReadModel       projections.ReadModel
 	UnitOfWork      sharedapp.UnitOfWork
 	OutboxPublisher eventbus.Publisher
 	Clock           sharedapp.Clock
@@ -36,7 +37,7 @@ type Deps struct {
 // Module is the wired context.
 type Module struct {
 	grpc      *customergrpc.Server
-	readModel *projections.MemoryReadModel
+	readModel projections.ReadModel
 	inbound   *messaging.InboundHandlers
 	logger    *slog.Logger
 }
@@ -55,8 +56,7 @@ func New(d Deps) *Module {
 		Uniqueness: uniqueness,
 	}
 
-	readModel := projections.NewMemoryReadModel()
-	qryDeps := queries.Deps{ReadModel: readModel}
+	qryDeps := queries.Deps{ReadModel: d.ReadModel}
 
 	create := commands.NewCreateCustomerHandler(cmdDeps)
 	changeEmail := commands.NewChangeCustomerEmailHandler(cmdDeps)
@@ -65,7 +65,7 @@ func New(d Deps) *Module {
 
 	return &Module{
 		grpc:      customergrpc.NewServer(create, changeEmail, get, list),
-		readModel: readModel,
+		readModel: d.ReadModel,
 		inbound:   messaging.NewInboundHandlers(d.Logger),
 		logger:    d.Logger,
 	}

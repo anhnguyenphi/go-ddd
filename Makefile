@@ -38,7 +38,7 @@ proto-lint: ## Lint api/proto/**/*.proto (needs buf)
 
 .PHONY: openapi-lint
 openapi-lint: ## Validate the generated api/openapi/*.swagger.json (needs npx)
-	npx --yes @redocly/cli@1.25.11 lint api/openapi/customerv1.swagger.json
+	npx --yes @redocly/cli@1.25.11 lint api/openapi/myappv1.swagger.json
 
 .PHONY: build
 build: ## Build all binaries into ./bin

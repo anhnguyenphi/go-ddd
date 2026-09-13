@@ -183,7 +183,7 @@ func registerOps(mux *http.ServeMux, p persistence) {
 func registerDocs(mux *http.ServeMux) {
 	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = w.Write(openapi.CustomerV1)
+		_, _ = w.Write(openapi.MyAppV1)
 	})
 	mux.HandleFunc("GET /docs", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

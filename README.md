@@ -6,8 +6,6 @@ pattern. It is structured as a **modular monolith** with hard boundaries between
 bounded contexts, so individual contexts can later be extracted into services
 without rewrites.
 
-The full rationale for this layout lives in [PROJECT.md](PROJECT.md).
-
 ## Layout
 
 ```
@@ -27,7 +25,9 @@ internal/
     infrastructure/  Persistence, messaging (mappers), projections
     interfaces/      gRPC (also transcoded to REST by grpc-gateway) / consumers
   notification/      Consumer context — reacts to customer integration events
-  identity/ order/ payment/   Placeholder contexts (structure only)
+  order/             Sync-communication example — PlaceOrder calls customer
+                     directly (see below); gRPC + REST, same as customer
+  identity/ payment/ Placeholder contexts (structure only)
 pkg/                 Library code safe for external import
 api/                 OpenAPI + protobuf contracts
 migrations/          SQL migrations (customer schema + outbox)
@@ -44,7 +44,52 @@ interfaces ──> application ──> domain <── infrastructure
 
 Domain depends on nothing but the standard library and `shared/domain`.
 Cross-context communication happens **only** through commands, queries, and
-integration events — never by importing another context's packages.
+integration events — never by importing another context's packages
+(`tests/arch/layering_test.go` enforces this by inspecting the real import
+graph, not just by convention).
+
+## Cross-context communication: async vs sync
+
+Two contexts need to talk to each other for different reasons, and this
+skeleton has a reference example of each:
+
+- **Async (event-driven)** — `customer` → `notification`. Creating a customer
+  publishes `customer.created` to the outbox; a relay forwards it to the event
+  bus; `notification` reacts whenever it gets around to it. Nothing about
+  creating a customer needs to wait for a welcome email to send, so this is
+  fire-and-forget, and `notification` can be down without breaking customer
+  creation.
+- **Sync (request/response)** — `order` → `customer`. Placing an order needs a
+  definite yes/no about the customer *right now*: there is no order to build
+  at all if the customer doesn't exist, so nothing is gained by publishing an
+  event and reacting to it later. `order/application.CustomerVerifier` is a
+  port order's own application layer defines; `order/infrastructure/customerclient`
+  implements it with a call, in-process, against the same `customerv1` gRPC
+  contract external clients use. Neither context imports the other's
+  internal packages — only the versioned proto contract is shared, and the
+  composition root (`internal/bootstrap`) is what actually wires one
+  context's service into the other's adapter.
+
+Order's own delivery adapter (`internal/order/interfaces/grpc`) exposes this
+as `order.v1.OrderService/PlaceOrder` on the same gRPC server customer runs
+on (`:9090`), transcoded to REST on `:8080` exactly like customer:
+
+```bash
+curl -sS -XPOST localhost:8080/api/v1/orders \
+  -H 'content-type: application/json' \
+  -d '{"customer_id":"<id-from-creating-a-customer-above>"}' | jq
+
+grpcurl -plaintext -d '{"customer_id":"<id-from-creating-a-customer-above>"}' \
+  localhost:9090 order.v1.OrderService/PlaceOrder
+```
+
+Both land on the same merged OpenAPI doc at `/openapi.json` / `/docs`
+(`api/openapi/myappv1.swagger.json` — see buf.gen.yaml's `allow_merge`).
+
+Try it in code: `internal/order/application/commands/place_order_test.go` is
+a fast unit test with a fake verifier; `tests/integration/order_sync_test.go`
+wires the real `customer` context and calls `PlaceOrder` over both gRPC and
+REST — including the case where the customer doesn't exist yet.
 
 ## Quick start
 

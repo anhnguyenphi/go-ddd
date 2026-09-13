@@ -76,6 +76,12 @@ func (m *Module) RegisterGRPC(s *grpc.Server) {
 	customerv1.RegisterCustomerServiceServer(s, m.grpc)
 }
 
+// GRPC exposes the raw gRPC service implementation for other contexts that
+// need a synchronous, in-process call into customer — see
+// order/infrastructure/customerclient, which is the only intended caller.
+// External callers still go through RegisterGRPC as normal, over the network.
+func (m *Module) GRPC() customerv1.CustomerServiceServer { return m.grpc }
+
 // RegisterGateway mounts this context's REST routes on the grpc-gateway mux,
 // transcoding HTTP/JSON straight to the in-process gRPC server (no network
 // hop) per the google.api.http annotations in customer.proto. REST is no

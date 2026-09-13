@@ -17,5 +17,11 @@ plugins:
     out: api/openapi
     opt:
       - allow_merge=true
-      - merge_file_name=customerv1
+      - merge_file_name=myappv1
       - json_names_for_fields=false
+    # buf's default per-directory invocation strategy runs this plugin once
+    # per proto package (customer/v1, order/v1, ...), each independently
+    # trying to write merge_file_name — the second write silently clobbers
+    # the first. "all" invokes it once across every target file so allow_merge
+    # actually merges, matching a plain `protoc --openapiv2_out=...` call.
+    strategy: all

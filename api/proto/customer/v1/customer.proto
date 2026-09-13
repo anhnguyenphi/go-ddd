@@ -9,11 +9,15 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 
+// This info block becomes the title of the whole merged OpenAPI doc (see
+// buf.gen.yaml's openapiv2 `allow_merge`/`merge_file_name`) — every
+// context's REST-annotated RPCs land in one api/openapi/customerv1.swagger.json,
+// not just customer's, since it's the only proto in this tree that sets one.
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
-    title: "Customer API";
+    title: "myapp API";
     version: "1.0.0";
-    description: "Delivery contract for the customer bounded context (internal/customer/interfaces/grpc), transcoded to REST by grpc-gateway.";
+    description: "REST surface for this app's bounded contexts, transcoded by grpc-gateway from their gRPC contracts (customer.v1, order.v1, ...).";
   }
 };
 

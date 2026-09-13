@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+// Order context — gRPC delivery contract.
+package order.v1;
+
+option go_package = "github.com/example/myapp/api/proto/order/v1;orderv1";
+
+import "google/api/annotations.proto";
+
+// ---- gRPC service ----------------------------------------------------------
+// REST is not a separate hand-written adapter: grpc-gateway transcodes this
+// RPC to HTTP/JSON per the google.api.http annotation below, in-process, the
+// same way customer.v1.CustomerService's REST surface works.
+
+service OrderService {
+  // Place an order for a customer. The order context calls back into
+  // customer synchronously (see internal/order/infrastructure/customerclient)
+  // to confirm the customer exists before an order is built at all.
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/orders"
+      body: "*"
+    };
+  }
+}
+
+message PlaceOrderRequest {
+  string customer_id = 1;
+}
+
+message PlaceOrderResponse {
+  string id = 1;
+}

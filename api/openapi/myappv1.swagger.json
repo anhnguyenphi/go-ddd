@@ -1,13 +1,16 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "Customer API",
-    "description": "Delivery contract for the customer bounded context (internal/customer/interfaces/grpc), transcoded to REST by grpc-gateway.",
+    "title": "myapp API",
+    "description": "REST surface for this app's bounded contexts, transcoded by grpc-gateway from their gRPC contracts (customer.v1, order.v1, ...).",
     "version": "1.0.0"
   },
   "tags": [
     {
       "name": "CustomerService"
+    },
+    {
+      "name": "OrderService"
     }
   ],
   "consumes": [
@@ -156,6 +159,39 @@
           "CustomerService"
         ]
       }
+    },
+    "/api/v1/orders": {
+      "post": {
+        "summary": "Place an order for a customer. The order context calls back into\ncustomer synchronously (see internal/order/infrastructure/customerclient)\nto confirm the customer exists before an order is built at all.",
+        "operationId": "OrderService_PlaceOrder",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1PlaceOrderResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1PlaceOrderRequest"
+            }
+          }
+        ],
+        "tags": [
+          "OrderService"
+        ]
+      }
     }
   },
   "definitions": {
@@ -259,6 +295,22 @@
         "offset": {
           "type": "integer",
           "format": "int32"
+        }
+      }
+    },
+    "v1PlaceOrderRequest": {
+      "type": "object",
+      "properties": {
+        "customer_id": {
+          "type": "string"
+        }
+      }
+    },
+    "v1PlaceOrderResponse": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
         }
       }
     }

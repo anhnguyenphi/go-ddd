@@ -668,8 +668,8 @@ const file_customer_v1_customer_proto_rawDesc = "" +
 	"\x0eCreateCustomer\x12\".customer.v1.CreateCustomerRequest\x1a#.customer.v1.CreateCustomerResponse\"\x1c\x82\xd3\xe4\x93\x02\x16:\x01*\"\x11/api/v1/customers\x12e\n" +
 	"\vGetCustomer\x12\x1f.customer.v1.GetCustomerRequest\x1a\x15.customer.v1.Customer\"\x1e\x82\xd3\xe4\x93\x02\x18\x12\x16/api/v1/customers/{id}\x12q\n" +
 	"\rListCustomers\x12!.customer.v1.ListCustomersRequest\x1a\".customer.v1.ListCustomersResponse\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/api/v1/customers\x12\x91\x01\n" +
-	"\x13ChangeCustomerEmail\x12'.customer.v1.ChangeCustomerEmailRequest\x1a(.customer.v1.ChangeCustomerEmailResponse\"'\x82\xd3\xe4\x93\x02!:\x01*2\x1c/api/v1/customers/{id}/emailB\xd4\x01\x92A\x95\x01\x12\x92\x01\n" +
-	"\fCustomer API\x12{Delivery contract for the customer bounded context (internal/customer/interfaces/grpc), transcoded to REST by grpc-gateway.2\x051.0.0Z9github.com/example/myapp/api/proto/customer/v1;customerv1b\x06proto3"
+	"\x13ChangeCustomerEmail\x12'.customer.v1.ChangeCustomerEmailRequest\x1a(.customer.v1.ChangeCustomerEmailResponse\"'\x82\xd3\xe4\x93\x02!:\x01*2\x1c/api/v1/customers/{id}/emailB\xd7\x01\x92A\x98\x01\x12\x95\x01\n" +
+	"\tmyapp API\x12\x80\x01REST surface for this app's bounded contexts, transcoded by grpc-gateway from their gRPC contracts (customer.v1, order.v1, ...).2\x051.0.0Z9github.com/example/myapp/api/proto/customer/v1;customerv1b\x06proto3"
 
 var (
 	file_customer_v1_customer_proto_rawDescOnce sync.Once

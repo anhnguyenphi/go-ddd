@@ -1,4 +1,4 @@
-# Lint config for `make openapi-lint` (api/openapi/customerv1.swagger.json,
+# Lint config for `make openapi-lint` (api/openapi/myappv1.swagger.json,
 # generated from api/proto by `make proto`). Extends the built-in recommended
 # ruleset and turns off checks that don't fit this skeleton: it has no auth
 # layer yet, and grpc-gateway's default error response isn't a `4XX`-typed

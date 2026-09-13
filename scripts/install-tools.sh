@@ -23,8 +23,10 @@ GOLANGCI_LINT_VERSION="v2.13.2"
 GOVULNCHECK_VERSION="latest"
 GOIMPORTS_VERSION="latest"
 MOCKERY_VERSION="v2.53.7"
-PROTOC_GEN_GO_VERSION="v1.36.6"
+BUF_VERSION="v1.73.0"
+PROTOC_GEN_GO_VERSION="v1.36.12"
 PROTOC_GEN_GO_GRPC_VERSION="v1.5.1"
+GRPC_GATEWAY_VERSION="v2.30.0"
 
 # ---- helpers -------------------------------------------------------------
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -54,9 +56,13 @@ install_vuln()   { go_install govulncheck   "golang.org/x/vuln/cmd/govulncheck@$
 install_imports() { go_install goimports     "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"; }
 install_mockery() { go_install mockery      "github.com/vektra/mockery/v2@${MOCKERY_VERSION}"; }
 install_proto()  {
-	go_install protoc-gen-go      "google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}"
-	go_install protoc-gen-go-grpc "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}"
-	have protoc || echo "    note: 'protoc' itself is not a Go tool — install it via your package manager"
+	go_install buf                    "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
+	go_install protoc-gen-go          "google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION}"
+	go_install protoc-gen-go-grpc     "google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}"
+	go_install protoc-gen-grpc-gateway "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@${GRPC_GATEWAY_VERSION}"
+	go_install protoc-gen-openapiv2   "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@${GRPC_GATEWAY_VERSION}"
+	# buf is its own compiler front-end (no separate 'protoc' binary needed);
+	# `make proto` drives it via buf.gen.yaml.
 }
 
 ALL=(lint vuln imports mockery proto)

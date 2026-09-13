@@ -6,6 +6,9 @@
     "write_timeout": 15000000000,
     "shutdown_timeout": 20000000000
   },
+  "grpc": {
+    "addr": ":9090"
+  },
   "log": {
     "level": "info",
     "format": "json"

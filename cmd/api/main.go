@@ -40,19 +40,22 @@ func run() error {
 	defer func() { _ = app.Close() }()
 
 	server := httpx.New(cfg.HTTP, app.HTTPHandler(), app.Logger)
+	grpcServer := app.GRPCServer()
 
-	// Run the HTTP server and the background relay concurrently; the first hard
-	// error (or a signal, via ctx) brings both down.
-	errCh := make(chan error, 2)
+	// Run the HTTP server, the gRPC server, and the background relay
+	// concurrently; the first hard error (or a signal, via ctx) brings all down.
+	errCh := make(chan error, 3)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	go func() { errCh <- server.Run(runCtx) }()
+	go func() { errCh <- grpcServer.Run(runCtx) }()
 	go func() { errCh <- app.RunBackground(runCtx) }()
 
 	err = <-errCh
 	cancel()
-	<-errCh // wait for the second goroutine to unwind
+	<-errCh // wait for the other two goroutines to unwind
+	<-errCh
 
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return err

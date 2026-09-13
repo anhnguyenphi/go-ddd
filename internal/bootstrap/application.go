@@ -10,9 +10,16 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/example/myapp/api/openapi"
 	"github.com/example/myapp/internal/eventbus"
 	"github.com/example/myapp/internal/eventbus/outbox"
 	"github.com/example/myapp/internal/platform/config"
+	"github.com/example/myapp/internal/platform/grpcx"
 	"github.com/example/myapp/internal/platform/httpx"
 	"github.com/example/myapp/internal/platform/observability"
 )
@@ -24,6 +31,7 @@ type Application struct {
 	Logger *slog.Logger
 
 	handler     http.Handler
+	grpcServer  *grpcx.Server
 	bus         eventbus.Bus
 	relay       *outbox.Relay
 	persistence persistence
@@ -52,9 +60,28 @@ func Build(ctx context.Context, cfg config.Config) (*Application, error) {
 
 	mods := newModules(logger, p, outboxPub)
 
+	// The gateway calls the gRPC service objects directly in-process (no
+	// dial, no second network hop). It's the actual REST implementation —
+	// there is no separate hand-written HTTP adapter — so its JSON wire
+	// format is pinned to the proto's own field names (snake_case) to match
+	// the generated OpenAPI doc (json_names_for_fields=false in buf.gen.yaml).
+	gwMux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true},
+			UnmarshalOptions: protojson.UnmarshalOptions{DiscardUnknown: true},
+		}),
+		runtime.WithForwardResponseOption(grpcx.StatusCodeOption),
+		runtime.WithOutgoingHeaderMatcher(grpcx.OutgoingHeaderMatcher),
+	)
+	if err := mods.registerGateway(ctx, gwMux); err != nil {
+		_ = p.close()
+		return nil, err
+	}
+
 	mux := http.NewServeMux()
 	registerOps(mux, p)
-	mods.registerHTTP(mux)
+	registerDocs(mux)
+	mux.Handle("/api/v1/", gwMux)
 	if err := mods.registerSubscriptions(bus); err != nil {
 		_ = p.close()
 		return nil, err
@@ -66,10 +93,17 @@ func Build(ctx context.Context, cfg config.Config) (*Application, error) {
 		httpx.Recover(),
 	)
 
+	grpcSrv := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(grpcx.Recovery(logger), grpcx.AccessLog(logger)),
+	)
+	mods.registerGRPC(grpcSrv)
+	reflection.Register(grpcSrv) // lets grpcurl/grpcui introspect without the .proto files
+
 	return &Application{
 		Config:      cfg,
 		Logger:      logger,
 		handler:     handler,
+		grpcServer:  grpcx.New(cfg.GRPC, grpcSrv, logger),
 		bus:         bus,
 		relay:       relay,
 		persistence: p,
@@ -78,6 +112,9 @@ func Build(ctx context.Context, cfg config.Config) (*Application, error) {
 
 // HTTPHandler is the root handler for the API process.
 func (a *Application) HTTPHandler() http.Handler { return a.handler }
+
+// GRPCServer is the gRPC endpoint for the API process.
+func (a *Application) GRPCServer() *grpcx.Server { return a.grpcServer }
 
 // runner is implemented by any bus that owns a background loop (the Kafka
 // adapter's consumer readers; the in-process bus has none). Detected via an
@@ -140,6 +177,31 @@ func registerOps(mux *http.ServeMux, p persistence) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 }
+
+// registerDocs mounts the embedded OpenAPI spec (generated from the proto —
+// see api/openapi/openapi.go) and a Redoc viewer for it.
+func registerDocs(mux *http.ServeMux) {
+	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(openapi.CustomerV1)
+	})
+	mux.HandleFunc("GET /docs", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(docsHTML))
+	})
+}
+
+const docsHTML = `<!doctype html>
+<html>
+  <head>
+    <title>myapp API docs</title>
+    <meta charset="utf-8"/>
+  </head>
+  <body>
+    <redoc spec-url="/openapi.json"></redoc>
+    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  </body>
+</html>`
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

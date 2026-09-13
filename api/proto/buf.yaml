@@ -1,0 +1,16 @@
+version: v2
+modules:
+  - path: .
+deps:
+  - buf.build/googleapis/googleapis
+  - buf.build/grpc-ecosystem/grpc-gateway
+lint:
+  use:
+    - STANDARD
+  except:
+    # GetCustomer intentionally returns the Customer resource directly (REST
+    # convention for a GET-by-id), not a wrapper GetCustomerResponse.
+    - RPC_RESPONSE_STANDARD_NAME
+breaking:
+  use:
+    - FILE

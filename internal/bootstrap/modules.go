@@ -1,8 +1,11 @@
 package bootstrap
 
 import (
+	"context"
 	"log/slog"
-	"net/http"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
 
 	"github.com/example/myapp/internal/customer"
 	"github.com/example/myapp/internal/eventbus"
@@ -35,9 +38,15 @@ func newModules(logger *slog.Logger, p persistence, outboxPub eventbus.Publisher
 	}
 }
 
-// registerHTTP mounts every context's routes on mux.
-func (m modules) registerHTTP(mux *http.ServeMux) {
-	m.customer.RegisterHTTP(mux)
+// registerGateway mounts every context's REST routes (transcoded from gRPC by
+// grpc-gateway) on mux.
+func (m modules) registerGateway(ctx context.Context, mux *runtime.ServeMux) error {
+	return m.customer.RegisterGateway(ctx, mux)
+}
+
+// registerGRPC mounts every context's gRPC services on s.
+func (m modules) registerGRPC(s *grpc.Server) {
+	m.customer.RegisterGRPC(s)
 }
 
 // registerSubscriptions binds every context's event handlers to the bus.

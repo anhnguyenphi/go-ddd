@@ -18,6 +18,7 @@ import (
 type Config struct {
 	Env      string         `json:"env"` // dev | staging | prod
 	HTTP     HTTPConfig     `json:"http"`
+	GRPC     GRPCConfig     `json:"grpc"`
 	Log      LogConfig      `json:"log"`
 	Database DatabaseConfig `json:"database"`
 	Kafka    KafkaConfig    `json:"kafka"`
@@ -29,6 +30,10 @@ type HTTPConfig struct {
 	ReadTimeout     time.Duration `json:"read_timeout"`
 	WriteTimeout    time.Duration `json:"write_timeout"`
 	ShutdownTimeout time.Duration `json:"shutdown_timeout"`
+}
+
+type GRPCConfig struct {
+	Addr string `json:"addr"`
 }
 
 type LogConfig struct {
@@ -72,7 +77,8 @@ func Default() Config {
 			WriteTimeout:    15 * time.Second,
 			ShutdownTimeout: 20 * time.Second,
 		},
-		Log: LogConfig{Level: "info", Format: "text"},
+		GRPC: GRPCConfig{Addr: ":9090"},
+		Log:  LogConfig{Level: "info", Format: "text"},
 		Database: DatabaseConfig{
 			MaxOpenConns:    20,
 			MaxIdleConns:    10,
@@ -133,6 +139,7 @@ func applyEnv(cfg *Config) {
 	setDur(&cfg.HTTP.ReadTimeout, "HTTP_READ_TIMEOUT")
 	setDur(&cfg.HTTP.WriteTimeout, "HTTP_WRITE_TIMEOUT")
 	setDur(&cfg.HTTP.ShutdownTimeout, "HTTP_SHUTDOWN_TIMEOUT")
+	setStr(&cfg.GRPC.Addr, "GRPC_ADDR")
 	setStr(&cfg.Log.Level, "LOG_LEVEL")
 	setStr(&cfg.Log.Format, "LOG_FORMAT")
 	setStr(&cfg.Database.DSN, "DATABASE_URL")
@@ -153,6 +160,9 @@ func applyEnv(cfg *Config) {
 func (c Config) validate() error {
 	if c.HTTP.Addr == "" {
 		return errors.New("config: http.addr is required")
+	}
+	if c.GRPC.Addr == "" {
+		return errors.New("config: grpc.addr is required")
 	}
 	switch c.Log.Format {
 	case "json", "text":

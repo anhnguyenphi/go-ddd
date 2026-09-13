@@ -25,7 +25,7 @@ internal/
     domain/          Aggregates, value objects, domain events, policies
     application/     Commands, queries, DTOs, ports
     infrastructure/  Persistence, messaging (mappers), projections
-    interfaces/      HTTP / gRPC / consumers (delivery adapters)
+    interfaces/      gRPC (also transcoded to REST by grpc-gateway) / consumers
   notification/      Consumer context — reacts to customer integration events
   identity/ order/ payment/   Placeholder contexts (structure only)
 pkg/                 Library code safe for external import
@@ -63,11 +63,22 @@ make run-api        # start the HTTP API on :8080
 
 ### Try the reference slice
 
+`api/proto/customer/v1/customer.proto` is the single source of truth for the
+customer use cases: gRPC on `:9090` is the real service
+(`internal/customer/interfaces/grpc`), and REST on `:8080` is
+[grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway) transcoding
+HTTP/JSON straight to that same service in-process, per the `google.api.http`
+annotations in the proto — there is no separate hand-written HTTP adapter.
+
 ```bash
-# create a customer
+# create a customer (REST, via the gateway)
 curl -sS -XPOST localhost:8080/api/v1/customers \
   -H 'content-type: application/json' \
   -d '{"name":"Ada Lovelace","email":"ada@example.com"}' | jq
+
+# the same call over gRPC
+grpcurl -plaintext -d '{"name":"Ada","email":"ada@example.com"}' \
+  localhost:9090 customer.v1.CustomerService/CreateCustomer
 
 # the create flow: command -> aggregate -> outbox (same tx) -> relay -> event bus
 #   -> notification context logs a "welcome email"
@@ -82,7 +93,15 @@ curl -sS -XPATCH localhost:8080/api/v1/customers/<id>/email \
   -H 'content-type: application/json' -d '{"email":"ada@newmail.com"}' | jq
 ```
 
-`GET /healthz` and `GET /readyz` are always available.
+`GET /healthz` and `GET /readyz` are always available. The OpenAPI doc — also
+generated from the proto, not hand-maintained — is served at `/openapi.json`
+/ `/docs`:
+
+```bash
+make proto        # regenerate api/proto/**/*.pb.go, *.pb.gw.go, api/openapi/*.swagger.json (needs buf; `make tools` for the plugins)
+make proto-lint   # lint api/proto/**/*.proto (needs buf)
+make openapi-lint # validate the generated api/openapi/*.swagger.json (needs npx)
+```
 
 ## Swapping infrastructure
 

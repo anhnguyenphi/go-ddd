@@ -28,6 +28,18 @@ mocks: ## Regenerate test mocks (mockery; run `make tools` first)
 tidy: ## Sync go.mod / go.sum
 	$(GO) mod tidy
 
+.PHONY: proto
+proto: ## Regenerate Go + gRPC-gateway + OpenAPI from api/proto (needs buf; run `make tools` for the plugins)
+	buf generate
+
+.PHONY: proto-lint
+proto-lint: ## Lint api/proto/**/*.proto (needs buf)
+	buf lint api/proto
+
+.PHONY: openapi-lint
+openapi-lint: ## Validate the generated api/openapi/*.swagger.json (needs npx)
+	npx --yes @redocly/cli@1.25.11 lint api/openapi/customerv1.swagger.json
+
 .PHONY: build
 build: ## Build all binaries into ./bin
 	@mkdir -p $(BIN_DIR)

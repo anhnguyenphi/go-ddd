@@ -4,16 +4,20 @@
 package customer
 
 import (
+	"context"
 	"log/slog"
-	"net/http"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
+
+	customerv1 "github.com/example/myapp/api/proto/customer/v1"
 	"github.com/example/myapp/internal/customer/application/commands"
 	"github.com/example/myapp/internal/customer/application/queries"
 	"github.com/example/myapp/internal/customer/domain"
 	"github.com/example/myapp/internal/customer/domain/services"
 	"github.com/example/myapp/internal/customer/infrastructure/messaging"
 	"github.com/example/myapp/internal/customer/infrastructure/projections"
-	customerhttp "github.com/example/myapp/internal/customer/interfaces/http"
+	customergrpc "github.com/example/myapp/internal/customer/interfaces/grpc"
 	"github.com/example/myapp/internal/eventbus"
 	sharedapp "github.com/example/myapp/internal/shared/application"
 )
@@ -31,7 +35,7 @@ type Deps struct {
 
 // Module is the wired context.
 type Module struct {
-	http      *customerhttp.Handler
+	grpc      *customergrpc.Server
 	readModel *projections.MemoryReadModel
 	inbound   *messaging.InboundHandlers
 	logger    *slog.Logger
@@ -54,24 +58,31 @@ func New(d Deps) *Module {
 	readModel := projections.NewMemoryReadModel()
 	qryDeps := queries.Deps{ReadModel: readModel}
 
-	handler := customerhttp.NewHandler(
-		commands.NewCreateCustomerHandler(cmdDeps),
-		commands.NewChangeCustomerEmailHandler(cmdDeps),
-		queries.NewGetCustomerHandler(qryDeps),
-		queries.NewListCustomersHandler(qryDeps),
-	)
+	create := commands.NewCreateCustomerHandler(cmdDeps)
+	changeEmail := commands.NewChangeCustomerEmailHandler(cmdDeps)
+	get := queries.NewGetCustomerHandler(qryDeps)
+	list := queries.NewListCustomersHandler(qryDeps)
 
 	return &Module{
-		http:      handler,
+		grpc:      customergrpc.NewServer(create, changeEmail, get, list),
 		readModel: readModel,
 		inbound:   messaging.NewInboundHandlers(d.Logger),
 		logger:    d.Logger,
 	}
 }
 
-// RegisterHTTP mounts this context's routes.
-func (m *Module) RegisterHTTP(mux *http.ServeMux) {
-	m.http.Register(mux)
+// RegisterGRPC mounts this context's gRPC service.
+func (m *Module) RegisterGRPC(s *grpc.Server) {
+	customerv1.RegisterCustomerServiceServer(s, m.grpc)
+}
+
+// RegisterGateway mounts this context's REST routes on the grpc-gateway mux,
+// transcoding HTTP/JSON straight to the in-process gRPC server (no network
+// hop) per the google.api.http annotations in customer.proto. REST is no
+// longer a hand-written adapter — the proto file is the single source of
+// truth for both the gRPC contract and its REST/OpenAPI projection.
+func (m *Module) RegisterGateway(ctx context.Context, mux *runtime.ServeMux) error {
+	return customerv1.RegisterCustomerServiceHandlerServer(ctx, mux, m.grpc)
 }
 
 // RegisterSubscriptions binds this context's event handlers (read-model

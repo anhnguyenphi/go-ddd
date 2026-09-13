@@ -48,6 +48,13 @@ type KafkaConfig struct {
 	// Brokers empty => the in-process bus is used instead of Kafka.
 	Brokers []string `json:"brokers"`
 	GroupID string   `json:"group_id"`
+
+	// MaxRetries is how many retry-topic hops a failed message gets before it
+	// is dead-lettered.
+	MaxRetries int `json:"max_retries"`
+	// RetryBaseDelay/RetryMaxDelay bound the exponential backoff between hops.
+	RetryBaseDelay time.Duration `json:"retry_base_delay"`
+	RetryMaxDelay  time.Duration `json:"retry_max_delay"`
 }
 
 type OutboxConfig struct {
@@ -71,7 +78,12 @@ func Default() Config {
 			MaxIdleConns:    10,
 			ConnMaxLifetime: 30 * time.Minute,
 		},
-		Kafka:  KafkaConfig{GroupID: "myapp"},
+		Kafka: KafkaConfig{
+			GroupID:        "myapp",
+			MaxRetries:     3,
+			RetryBaseDelay: time.Second,
+			RetryMaxDelay:  30 * time.Second,
+		},
 		Outbox: OutboxConfig{PollInterval: time.Second, BatchSize: 100},
 	}
 }
@@ -131,6 +143,9 @@ func applyEnv(cfg *Config) {
 		cfg.Kafka.Brokers = strings.Split(v, ",")
 	}
 	setStr(&cfg.Kafka.GroupID, "KAFKA_GROUP_ID")
+	setInt(&cfg.Kafka.MaxRetries, "KAFKA_MAX_RETRIES")
+	setDur(&cfg.Kafka.RetryBaseDelay, "KAFKA_RETRY_BASE_DELAY")
+	setDur(&cfg.Kafka.RetryMaxDelay, "KAFKA_RETRY_MAX_DELAY")
 	setDur(&cfg.Outbox.PollInterval, "OUTBOX_POLL_INTERVAL")
 	setInt(&cfg.Outbox.BatchSize, "OUTBOX_BATCH_SIZE")
 }

@@ -79,11 +79,35 @@ func Build(ctx context.Context, cfg config.Config) (*Application, error) {
 // HTTPHandler is the root handler for the API process.
 func (a *Application) HTTPHandler() http.Handler { return a.handler }
 
-// RunBackground runs the outbox relay (and, later, any in-process consumers)
-// until ctx is cancelled. The API runs this in a goroutine; the worker runs it
-// as its main loop.
+// runner is implemented by any bus that owns a background loop (the Kafka
+// adapter's consumer readers; the in-process bus has none). Detected via an
+// optional interface, the same pattern Close already uses, so swapping in a
+// future bus implementation needs no change here.
+type runner interface {
+	Run(ctx context.Context) error
+}
+
+// RunBackground runs the outbox relay and, if the wired bus owns one (Kafka
+// does; the in-process bus does not), its consumer loop — concurrently, until
+// ctx is cancelled or either returns a hard error. The API runs this in a
+// goroutine; the worker runs it as its main loop.
 func (a *Application) RunBackground(ctx context.Context) error {
-	return a.relay.Run(ctx)
+	r, ok := a.bus.(runner)
+	if !ok {
+		return a.relay.Run(ctx)
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errCh := make(chan error, 2)
+	go func() { errCh <- a.relay.Run(runCtx) }()
+	go func() { errCh <- r.Run(runCtx) }()
+
+	err := <-errCh
+	cancel()
+	<-errCh // wait for the second loop to unwind before returning
+	return err
 }
 
 // DrainOutbox performs a single synchronous relay pass. Useful in tests and to

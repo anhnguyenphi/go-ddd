@@ -9,8 +9,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	// To enable Postgres, add a driver here, e.g.:
-	//   _ "github.com/jackc/pgx/v5/stdlib"
+	// Postgres driver: registers itself as "pgx" for database/sql.
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/example/myapp/internal/bootstrap"
 	"github.com/example/myapp/internal/platform/config"

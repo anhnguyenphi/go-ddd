@@ -248,3 +248,70 @@ dependencies. To move to real infrastructure:
 
 All swaps happen in [internal/bootstrap](internal/bootstrap); no domain or
 application code changes.
+
+## Agent self-test harness
+
+Beyond `make test` (in-memory), [scripts/agent/](scripts/agent) brings up a
+real Postgres + Kafka stack and hands back tools to verify **any** feature
+end to end — not one fixed scenario. The diagram below shows the shortcut
+this gives you: `agentctl` reaches Kafka directly, in the same wire format
+the app itself uses, skipping the write path's usual aggregate → outbox →
+relay hop; `mockapi` stands in for whatever external API a feature calls out
+to, recording every request it receives.
+
+```mermaid
+flowchart LR
+    subgraph client["you / a test"]
+        direction TB
+        curl["curl REST<br/>(api)"]
+        actl["agentctl"]
+        mcurl["curl mockapi<br/>(__requests, __routes)"]
+    end
+
+    subgraph normal["normal write path"]
+        direction TB
+        api["api process"]
+        pg[("Postgres<br/>aggregate + outbox")]
+        worker["worker<br/>outbox relay"]
+    end
+
+    kafka{{"Kafka / Redpanda<br/>topics"}}
+
+    subgraph consumers["subscribers"]
+        direction TB
+        proj["read-model projection"]
+        notif["notification handler"]
+    end
+
+    mockapi["mockapi<br/>external-API double"]
+
+    curl -- "HTTP request" --> api
+    api -- "writes aggregate + outbox row<br/>same tx" --> pg
+    worker -- "polls & drains" --> pg
+    worker -- "publishes" --> kafka
+    kafka -- "delivers" --> proj
+    kafka -- "delivers" --> notif
+
+    actl == "publish<br/>same wire format, skips outbox" ==> kafka
+    kafka == "consume<br/>own reader, no group" ==> actl
+
+    api -. "external call<br/>future integration" .-> mockapi
+    worker -. "external call<br/>future integration" .-> mockapi
+    mcurl -- "inspect / reconfigure" --> mockapi
+
+    classDef harness fill:#fef3c7,stroke:#b45309,color:#78350f;
+    class actl,mockapi harness;
+```
+
+- `make agent-stack-up` / `make agent-stack-down` — bring the stack up for
+  interactive poking (prints URLs, log paths, example commands), tear it
+  down when done.
+- `make agent-verify` — the full gate: mocks, lint, build, unit + arch tests,
+  vuln, integration tests, then the stack + HTTP e2e suite.
+- [scripts/agent/examples/kafka-roundtrip.sh](scripts/agent/examples/kafka-roundtrip.sh)
+  — a worked example (publish an event, assert two different subscribers
+  both reacted) to copy and adapt for your own event/consumer.
+
+See [CLAUDE.md](CLAUDE.md) for exact commands (including the snap `go`
+toolchain gotcha) and [.claude/skills/agent-harness](.claude/skills/agent-harness)
+for the packaged Claude Code skill.

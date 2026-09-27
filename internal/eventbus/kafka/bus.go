@@ -78,6 +78,12 @@ func (c *Config) setDefaults() {
 	}
 }
 
+// DefaultTopicFor exposes the built-in event-name -> topic convention (see
+// Config.TopicFor) so tooling outside this package — e.g. cmd/agentctl, which
+// publishes and reads raw messages for end-to-end testing — can address the
+// right topic without duplicating or drifting from the real mapping.
+func DefaultTopicFor(eventName string) string { return defaultTopicFor(eventName) }
+
 func defaultTopicFor(eventName string) string {
 	// "customer.v1.created" -> "customer.v1.events"
 	for i := 0; i < len(eventName); i++ {
@@ -213,9 +219,20 @@ func (b *Bus) Run(ctx context.Context) error {
 	b.mu.RLock()
 	readers := append([]*kafkago.Reader(nil), b.readers...)
 	b.mu.RUnlock()
+	// Close concurrently: each Reader.Close() unblocks any in-flight
+	// FetchMessage and leaves its consumer-group membership, which can take a
+	// few seconds per reader. Closing one topic's main + retry-hop readers
+	// (let alone every subscribed topic's) sequentially made shutdown take
+	// tens of seconds; in parallel it takes as long as the single slowest one.
+	var closeWG sync.WaitGroup
 	for _, r := range readers {
-		_ = r.Close() // unblocks any in-flight FetchMessage
+		closeWG.Add(1)
+		go func(r *kafkago.Reader) {
+			defer closeWG.Done()
+			_ = r.Close()
+		}(r)
 	}
+	closeWG.Wait()
 	b.wg.Wait()
 	return ctx.Err()
 }

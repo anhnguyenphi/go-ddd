@@ -1,0 +1,20 @@
+[
+  {
+    "method": "POST",
+    "path": "/v1/charges",
+    "status": 201,
+    "body": { "id": "ch_mock_123", "status": "succeeded" }
+  },
+  {
+    "method": "GET",
+    "path": "/v1/charges/*",
+    "status": 200,
+    "body": { "id": "ch_mock_123", "status": "succeeded" }
+  },
+  {
+    "method": "GET",
+    "path": "/v1/fail",
+    "status": 500,
+    "body": { "error": "simulated provider outage" }
+  }
+]

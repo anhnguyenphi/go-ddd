@@ -43,9 +43,11 @@ openapi-lint: ## Validate the generated api/openapi/*.swagger.json (needs npx)
 .PHONY: build
 build: ## Build all binaries into ./bin
 	@mkdir -p $(BIN_DIR)
-	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/api     ./cmd/api
-	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/worker  ./cmd/worker
-	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/migrate ./cmd/migrate
+	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/api      ./cmd/api
+	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/worker   ./cmd/worker
+	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/migrate  ./cmd/migrate
+	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/agentctl ./cmd/agentctl
+	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/mockapi  ./cmd/mockapi
 
 .PHONY: run-api
 run-api: ## Run the HTTP API
@@ -99,6 +101,22 @@ docker-up: ## Start local infra (postgres, kafka)
 .PHONY: docker-down
 docker-down: ## Stop local infra
 	docker compose -f deployments/docker/docker-compose.yml down -v
+
+.PHONY: run-mockapi
+run-mockapi: ## Run the mock external-API server (see cmd/mockapi)
+	$(GO) run ./cmd/mockapi -addr :9999 -routes configs/mockapi.routes.example.json
+
+.PHONY: agent-stack-up
+agent-stack-up: ## Bring up docker infra + api/worker/mockapi for manual/feature-specific testing (GO=..., ARGS="--skip-docker" etc.)
+	GO=$(GO) scripts/agent/stack-up.sh $(ARGS)
+
+.PHONY: agent-stack-down
+agent-stack-down: ## Tear down whatever agent-stack-up started
+	scripts/agent/stack-down.sh
+
+.PHONY: agent-verify
+agent-verify: ## Agent self-test, full: mocks + full local gate + integration + stack up/down + HTTP e2e (GO=..., ARGS="--skip-e2e" etc.)
+	GO=$(GO) scripts/agent/verify.sh $(ARGS)
 
 .PHONY: clean
 clean: ## Remove build artifacts

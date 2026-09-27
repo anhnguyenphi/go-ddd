@@ -1,6 +1,6 @@
 module github.com/example/myapp
 
-go 1.26.7
+go 1.27.1
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0

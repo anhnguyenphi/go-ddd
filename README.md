@@ -249,69 +249,71 @@ dependencies. To move to real infrastructure:
 All swaps happen in [internal/bootstrap](internal/bootstrap); no domain or
 application code changes.
 
-## Agent self-test harness
+## Agent harness
 
-Beyond `make test` (in-memory), [scripts/agent/](scripts/agent) brings up a
-real Postgres + Kafka stack and hands back tools to verify **any** feature
-end to end — not one fixed scenario. The diagram below shows the shortcut
-this gives you: `agentctl` reaches Kafka directly, in the same wire format
-the app itself uses, skipping the write path's usual aggregate → outbox →
-relay hop; `mockapi` stands in for whatever external API a feature calls out
-to, recording every request it receives.
+AI agents (and humans) prove changes against a real, disposable copy of the
+service, not just in-memory unit tests. There are two layers, both in this repo:
+
+- **Runtime harness** ([_harness/](_harness)): `make harness-verify` builds
+  `api` and `worker` from the working tree, runs them against real Postgres
+  and Redpanda, and fakes every downstream HTTP service with WireMock. It
+  then runs declarative smoke checks that assert on the response, outbound
+  calls, published events, DB rows, and log lines. The result is one exit
+  code and a report in `tmp/harness/report.md`. Any outbound call that
+  matches no stub fails the run.
+- **Agent layer**: [AGENTS.md](AGENTS.md) (commands, rules, definition of
+  done, work loop; `CLAUDE.md` imports it), subagents and skills in
+  [.agents/](.agents), and
+  [docs/agent/](docs/agent), whose `learnings.md` is shared memory across tasks.
 
 ```mermaid
 flowchart LR
-    subgraph client["you / a test"]
+    subgraph driver["agent / developer"]
         direction TB
-        curl["curl REST<br/>(api)"]
-        actl["agentctl"]
-        mcurl["curl mockapi<br/>(__requests, __routes)"]
+        make["make harness-*"]
+        smoke["smoke checks<br/>_harness/smoke/*.sh"]
     end
 
-    subgraph normal["normal write path"]
+    subgraph host["host processes, built from the working tree"]
         direction TB
-        api["api process"]
-        pg[("Postgres<br/>aggregate + outbox")]
-        worker["worker<br/>outbox relay"]
+        api["api :58080<br/>REST + gRPC<br/>in-memory outbox + relay"]
+        worker["worker<br/>consumer loop"]
     end
 
-    kafka{{"Kafka / Redpanda<br/>topics"}}
-
-    subgraph consumers["subscribers"]
+    subgraph compose["docker compose · myapp-harness"]
         direction TB
-        proj["read-model projection"]
-        notif["notification handler"]
+        pg[("Postgres :55432")]
+        kafka{{"Redpanda :59092<br/>*.events · .retry.1 · .dlq"}}
+        wiremock["WireMock :59999<br/>one prefix per downstream"]
     end
 
-    mockapi["mockapi<br/>external-API double"]
-
-    curl -- "HTTP request" --> api
-    api -- "writes aggregate + outbox row<br/>same tx" --> pg
-    worker -- "polls & drains" --> pg
-    worker -- "publishes" --> kafka
-    kafka -- "delivers" --> proj
-    kafka -- "delivers" --> notif
-
-    actl == "publish<br/>same wire format, skips outbox" ==> kafka
-    kafka == "consume<br/>own reader, no group" ==> actl
-
-    api -. "external call<br/>future integration" .-> mockapi
-    worker -. "external call<br/>future integration" .-> mockapi
-    mcurl -- "inspect / reconfigure" --> mockapi
+    make --> smoke
+    smoke -- "HTTP trigger" --> api
+    smoke == "--produce (agentctl)" ==> kafka
+    api -- "aggregate + read model" --> pg
+    api -- "relay publishes" --> kafka
+    kafka -- "consumer group" --> api
+    kafka -- "consumer group" --> worker
+    worker -- "projection" --> pg
+    api -. "downstream calls" .-> wiremock
+    worker -. "downstream calls" .-> wiremock
+    smoke -. "probes: --await SQL" .-> pg
+    smoke -. "probes: --events (event tap)" .-> kafka
+    smoke -. "probes: --calls, unmatched" .-> wiremock
 
     classDef harness fill:#fef3c7,stroke:#b45309,color:#78350f;
-    class actl,mockapi harness;
+    class make,smoke,wiremock harness;
 ```
 
-- `make agent-stack-up` / `make agent-stack-down` — bring the stack up for
-  interactive poking (prints URLs, log paths, example commands), tear it
-  down when done.
-- `make agent-verify` — the full gate: mocks, lint, build, unit + arch tests,
-  vuln, integration tests, then the stack + HTTP e2e suite.
-- [scripts/agent/examples/kafka-roundtrip.sh](scripts/agent/examples/kafka-roundtrip.sh)
-  — a worked example (publish an event, assert two different subscribers
-  both reacted) to copy and adapt for your own event/consumer.
+```bash
+make GO=/snap/go/current/bin/go harness-verify   # up, migrate, seed, run, smoke, report; exit 0 / 1 / 2
+make harness-logs ARGS=errors                    # error lines from all apps, known noise filtered
+make harness-mocks ARGS=unmatched                # outbound calls with no stub
+make harness-events                              # events published since the last check
+make harness-mocks ARGS="scenario <svc> error"   # break a downstream (error|timeout|malformed|empty)
+make harness-down ARGS=--purge                   # reset everything
+```
 
-See [CLAUDE.md](CLAUDE.md) for exact commands (including the snap `go`
-toolchain gotcha) and [.claude/skills/agent-harness](.claude/skills/agent-harness)
-for the packaged Claude Code skill.
+[docs/agent/harness.md](docs/agent/harness.md) covers the pipeline, the
+check DSL, and how to extend the harness. The `verify-live` and
+`implement-and-verify-loop` skills say when and how an agent uses it.

@@ -47,7 +47,6 @@ build: ## Build all binaries into ./bin
 	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/worker   ./cmd/worker
 	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/migrate  ./cmd/migrate
 	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/agentctl ./cmd/agentctl
-	$(GO) build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/mockapi  ./cmd/mockapi
 
 .PHONY: run-api
 run-api: ## Run the HTTP API
@@ -102,21 +101,52 @@ docker-up: ## Start local infra (postgres, kafka)
 docker-down: ## Stop local infra
 	docker compose -f deployments/docker/docker-compose.yml down -v
 
-.PHONY: run-mockapi
-run-mockapi: ## Run the mock external-API server (see cmd/mockapi)
-	$(GO) run ./cmd/mockapi -addr :9999 -routes configs/mockapi.routes.example.json
+# ---- Harness: the real binaries + Postgres + Redpanda + WireMock, checked live ----
+# See docs/agent/harness.md. Everything lands in tmp/harness/ (report.md, logs).
 
-.PHONY: agent-stack-up
-agent-stack-up: ## Bring up docker infra + api/worker/mockapi for manual/feature-specific testing (GO=..., ARGS="--skip-docker" etc.)
-	GO=$(GO) scripts/agent/stack-up.sh $(ARGS)
+.PHONY: harness-verify
+harness-verify: ## Harness: up, migrate, seed, run, smoke, report; exit 0 PASS / 1 FAIL / 2 HARNESS ERROR (ARGS="<regex>" or "--suite <name>")
+	GO=$(GO) _harness/scripts/verify.sh $(ARGS)
 
-.PHONY: agent-stack-down
-agent-stack-down: ## Tear down whatever agent-stack-up started
-	scripts/agent/stack-down.sh
+.PHONY: harness-up
+harness-up: ## Harness: start Postgres + Redpanda + WireMock, create topics, reload the stubs
+	GO=$(GO) _harness/scripts/up.sh
 
-.PHONY: agent-verify
-agent-verify: ## Agent self-test, full: mocks + full local gate + integration + stack up/down + HTTP e2e (GO=..., ARGS="--skip-e2e" etc.)
-	GO=$(GO) scripts/agent/verify.sh $(ARGS)
+.PHONY: harness-migrate
+harness-migrate: ## Harness: migrations on the harness DB (ARGS="up" | "down 1" | "status")
+	GO=$(GO) _harness/scripts/migrate.sh $(ARGS)
+
+.PHONY: harness-seed
+harness-seed: ## Harness: (re)load the idempotent fixtures in _harness/seed
+	GO=$(GO) _harness/scripts/seed.sh
+
+.PHONY: harness-run
+harness-run: ## Harness: rebuild and restart api + worker from the working tree
+	GO=$(GO) _harness/scripts/run.sh
+
+.PHONY: harness-smoke
+harness-smoke: ## Harness: re-run smoke checks against the running apps (ARGS="<regex>" or "--suite <name>")
+	GO=$(GO) _harness/scripts/smoke.sh $(ARGS)
+
+.PHONY: harness-logs
+harness-logs: ## Harness: app logs (ARGS="errors [regex]" | "<app> [n]")
+	GO=$(GO) _harness/scripts/logs.sh $(ARGS)
+
+.PHONY: harness-mocks
+harness-mocks: ## Harness: WireMock (ARGS="requests [svc]" | unmatched | routes | "scenario <svc> <kind>" | reset)
+	GO=$(GO) _harness/scripts/mocks.sh $(ARGS)
+
+.PHONY: harness-events
+harness-events: ## Harness: events published since the last check (ARGS="--all" | "--raw" | <event-name>)
+	GO=$(GO) _harness/scripts/events.sh $(ARGS)
+
+.PHONY: harness-kafka
+harness-kafka: ## Harness: agentctl kafka against the harness broker (ARGS="publish -name ..." | topics)
+	GO=$(GO) _harness/scripts/kafka.sh $(ARGS)
+
+.PHONY: harness-down
+harness-down: ## Harness: stop apps and dependencies (ARGS=--purge also drops data, logs and the report)
+	GO=$(GO) _harness/scripts/down.sh $(ARGS)
 
 .PHONY: clean
 clean: ## Remove build artifacts

@@ -1,0 +1,68 @@
+# Harness dependencies: the real datastore and broker, plus WireMock standing
+# in for every downstream HTTP service. The apps (api, worker) run on the
+# host, built from the working tree, so every iteration is a rebuild rather
+# than an image build.
+#
+# Isolated from the dev stack in deployments/docker on purpose: its own
+# project name, ports (5xxxx) and volume, so a harness run never touches a
+# developer's local database and both can run side by side.
+#
+# Driven by _harness/scripts/*.sh; don't `docker compose up` it by hand.
+
+name: myapp-harness
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: myapp
+      POSTGRES_PASSWORD: harness-fake-password
+      POSTGRES_DB: myapp_harness
+    ports:
+      - "55432:5432"
+    volumes:
+      - harness-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myapp -d myapp_harness"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:59092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:59092
+    ports:
+      - "59092:59092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health -X brokers=localhost:59092 | grep -q 'Healthy:.*true'"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # One path prefix per downstream service (e.g. /payments/...). Stubs are the
+  # files in _harness/mocks, pushed in through the admin API (/__admin) by
+  # up.sh, not mounted: see mock_reset in scripts/lib.sh. Anything unstubbed
+  # gets a 404 and is journaled as unmatched, which fails the harness run.
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    command: ["--disable-banner"]
+    ports:
+      - "59999:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/__admin/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  harness-pgdata:

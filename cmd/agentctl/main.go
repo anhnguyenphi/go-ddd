@@ -4,6 +4,13 @@
 //	agentctl kafka publish -name customer.v1.created -aggregate-id c-1 \
 //	    -payload '{"id":"c-1","name":"Ada","email":"ada@example.com"}'
 //	agentctl kafka consume -name customer.v1.created -aggregate-id c-1 -timeout 10s
+//	agentctl kafka mark -o tmp/harness/events.mark
+//	agentctl kafka events -since-mark tmp/harness/events.mark
+//
+// mark and events together are the harness's event tap: mark records the end
+// offset of every partition of every topic, and events later prints each
+// message produced after that point, across all topics, non-destructively
+// (no consumer group, nothing committed).
 //
 // publish reuses the production kafka.Bus.Publish path (same topic-naming
 // convention, same JSON wire codec), so a message it produces is
@@ -56,6 +63,10 @@ func run(args []string) error {
 		return runPublish(args[2:])
 	case "consume":
 		return runConsume(args[2:])
+	case "mark":
+		return runMark(args[2:])
+	case "events":
+		return runEvents(args[2:])
 	default:
 		usage()
 		return fmt.Errorf("unknown kafka subcommand %q", args[1])
@@ -68,8 +79,10 @@ func usage() {
 Usage:
   agentctl kafka publish -name <event-name> -aggregate-id <id> -payload <json> [flags]
   agentctl kafka consume -name <event-name> | -topic <topic> [flags]
+  agentctl kafka mark -o <file>                 snapshot every topic's end offsets
+  agentctl kafka events -since-mark <file>      print every event produced after the snapshot
 
-Run "agentctl kafka publish -h" or "agentctl kafka consume -h" for flags.`)
+Run "agentctl kafka <subcommand> -h" for flags.`)
 }
 
 // ---- publish ---------------------------------------------------------------
@@ -268,6 +281,7 @@ func printEvent(w io.Writer, topic string, msg kafkago.Message, ev eventbus.Even
 		"causation_id":   ev.CausationID,
 		"payload":        payload,
 		"metadata":       ev.Metadata,
+		"headers":        headerMap(msg.Headers),
 	}
 	enc := json.NewEncoder(w)
 	return enc.Encode(out)

@@ -19,3 +19,6 @@ configs/config.local.json
 .idea/
 .vscode/
 .DS_Store
+
+# Harness run output (logs, report.md, binaries)
+/tmp/

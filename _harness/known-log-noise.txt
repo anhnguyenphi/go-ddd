@@ -1,0 +1,4 @@
+# Error-level log lines that are expected during a harness run and must not
+# fail it. One extended regexp (grep -E) per line; blank lines and # comments
+# are ignored. Every entry needs a comment saying WHY it is harmless. If you
+# can't explain it, it's a bug, not noise.

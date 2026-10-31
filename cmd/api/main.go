@@ -54,8 +54,13 @@ func run() error {
 
 	err = <-errCh
 	cancel()
-	<-errCh // wait for the other two goroutines to unwind
-	<-errCh
+	// Wait for the other two goroutines to unwind. The first error is the one
+	// returned; later ones are logged so a failed shutdown isn't lost.
+	for range 2 {
+		if e := <-errCh; e != nil && !errors.Is(e, context.Canceled) {
+			app.Logger.Error("component stopped with error", "err", e)
+		}
+	}
 
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return err

@@ -19,7 +19,7 @@ mkdir -p "$GOBIN"
 # ---- pinned versions -------------------------------------------------------
 # Keep these in sync with .golangci.yml / CI.
 # golangci-lint: pinned to the v2.x line (matches the v2 schema in .golangci.yml).
-GOLANGCI_LINT_VERSION="v2.13.2"
+GOLANGCI_LINT_VERSION="v2.15.0"
 GOVULNCHECK_VERSION="latest"
 GOIMPORTS_VERSION="latest"
 MOCKERY_VERSION="v2.53.7"

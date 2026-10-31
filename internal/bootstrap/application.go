@@ -7,6 +7,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -143,7 +144,11 @@ func (a *Application) RunBackground(ctx context.Context) error {
 
 	err := <-errCh
 	cancel()
-	<-errCh // wait for the second loop to unwind before returning
+	// Wait for the second loop to unwind before returning; log its error
+	// rather than drop it, since only the first one is returned.
+	if e := <-errCh; e != nil && !errors.Is(e, context.Canceled) {
+		a.Logger.Error("background loop stopped with error", "err", e)
+	}
 	return err
 }
 

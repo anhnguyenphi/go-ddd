@@ -32,11 +32,15 @@ changelog (that's git), or anything obvious from the code.
 
 - The outbox is in-memory even in the Postgres profile. Events written by a process that dies before its relay runs are lost. Don't assume an `outbox_messages` row exists. (`internal/bootstrap/application.go`, 2026-10-28)
 - Order placement checks the customer through customer's read model, so a customer created a moment ago can read as unknown (404) until the projection catches up. (`internal/order/infrastructure/customerclient/verifier.go`, 2026-10-28)
-- `PlaceOrder` over REST returns 200, not 201. Unlike `CreateCustomer`, it doesn't set the `x-http-code` metadata. Pinned by the smoke check `order-place-for-seeded-customer`. (`internal/order/interfaces/grpc/server.go`, 2026-10-28)
-- An unknown customer in `PlaceOrder` returns 404, not 400 or 422, because `ErrNotFound` passes straight through. Pinned by `order-place-unknown-customer`. (2026-10-28)
-- An undecodable `customer.v1.created` payload fails both subscribers (projection and notification). It hops through `.retry.1` and lands on `customer.v1.events.dlq` without blocking the partition. (`_harness/smoke/checks_resilience.sh`, 2026-10-28)
+- `PlaceOrder` over REST returns 200, not 201. Unlike `CreateCustomer`, it doesn't set the `x-http-code` metadata. Pinned by the `OrderREST` scenario. (`internal/order/interfaces/grpc/server.go`, 2026-10-28)
+- An unknown customer in `PlaceOrder` returns 404, not 400 or 422, because `ErrNotFound` passes straight through. Pinned by the `OrderREST` scenario. (2026-10-28)
+- An undecodable `customer.v1.created` payload fails both subscribers (projection and notification). It hops through `.retry.1` and lands on `customer.v1.events.dlq` without blocking the partition. Bus behavior pinned by `TestKafkaBus_FailingHandlerRetriesThenDeadLetters`; see it live with the poison check in `_harness/checks/example.sh.sample`. (2026-10-28)
 
 ## Harness
+
+- The harness is one sandbox per worktree on shared infra (2026-11-10 redesign). The registry of slots lives in the **git common dir** (`.git/myapp-harness/`, also pid files), so every worktree sees it, and it's never committed. Sandbox names come from the worktree's directory name, so two worktrees with the same basename collide: the second gets "belongs to worktree ..." and needs `SANDBOX=<name>`. (`_harness/scripts/lib.sh`, 2026-11-10)
+- WireMock is shared, so everything sandbox-scoped goes through metadata and path prefixes: stubs are imported with `deleteAllNotInImport: false`, tagged `harnessSandbox`, ids stripped, and removed with `remove-by-metadata`; the journal is cleared with `POST /__admin/requests/remove` (`urlPathPattern`), never `DELETE /__admin/requests`, which would wipe every sandbox's journal mid-check. (`mock_reset` in `_harness/scripts/lib.sh`, 2026-11-10)
+- `order.v1.placed` is consumed by the customer context but no context publishes it yet (`OrderPlaced` is recorded but has no integration mapping). Tests that need it publish it directly on the bus (`side_effects_test.go`). (2026-11-10)
 
 - A worker shutdown takes about 7s, because Kafka readers drain on SIGTERM. The consumer group then needs about 9s to become Stable again, so `harness-run` takes about 20s. That's expected, and `run.sh` waits for it. (`_harness/scripts/run.sh`, 2026-10-28)
 - With colima, a deleted file in a bind mount stays visible in the container for about 20s, because directory listings are cached. That's why WireMock stubs are pushed through `/__admin/mappings/import` (`mock_reset` in `_harness/scripts/lib.sh`) instead of being mounted. Colima also mounts only `$HOME`, so a mount from `/tmp` shows up empty. (2026-10-28)

@@ -1,6 +1,6 @@
 ---
 name: add-endpoint
-description: Use when adding or changing an API endpoint (an RPC plus its REST route) in this repo. It walks the proto-first flow through the layers (proto → application command/query → gRPC adapter → module wiring) and ends with smoke checks in the harness.
+description: Use when adding or changing an API endpoint (an RPC plus its REST route) in this repo. It walks the proto-first flow through the layers (proto → application command/query → gRPC adapter → module wiring) and starts with a failing regression scenario.
 ---
 
 # Add an endpoint
@@ -11,11 +11,14 @@ Copy the customer context: `CreateCustomer` for a command, `GetCustomer` /
 
 ## Steps
 
-1. **Checks first.** Add `check` lines to `_harness/smoke/checks.sh` for the
-   new route: the happy path (status, `--jq` on the body, plus `--await` on
-   the rows and `--events` when it writes), a validation failure (`400`,
-   `--no-events`), and not-found (`404`) where relevant. Run them and see
-   them fail.
+1. **Tests first.** Add a scenario in `internal/testsupport/scenarios` (and
+   list it in `All()`) for the new route: the happy path (status and body,
+   then the read side via polling), a validation failure (`400`), and
+   not-found (`404`) where relevant. It runs on every profile in
+   `tests/integration` and in e2e. Run
+   `make test-integration-short` and see it fail. Optionally add scratch
+   checks in `_harness/checks/<task>.sh` to watch rows (`--await`) and events
+   (`--events`, `--no-events`) live.
 2. **Proto**: add the RPC and messages to `api/proto/<ctx>/v1/<ctx>.proto`
    with a `google.api.http` annotation (`post: "/api/v1/..." body: "*"`).
    Field names are snake_case and become the REST JSON names. Then run
@@ -46,5 +49,6 @@ Copy the customer context: `CreateCustomer` for a command, `GetCustomer` /
 - Status codes come from `mapError` (gRPC code), which grpc-gateway turns into
   HTTP: NotFound→404, AlreadyExists→409, InvalidArgument→400,
   PermissionDenied→403, anything else→500.
-- The read side is eventually consistent. A check that reads right after a
-  write needs a re-polled `GET` (the default for GET) or `--await`.
+- The read side is eventually consistent. A scenario that reads right after
+  a write polls (`api.Eventually`, `AwaitCustomer`); a scratch check needs a
+  re-polled `GET` (the default for GET) or `--await`.

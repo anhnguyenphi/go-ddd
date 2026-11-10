@@ -12,8 +12,8 @@ read:
   ran into. Always read it.
 - [docs/agent/architecture.md](docs/agent/architecture.md): contexts, layers,
   write/read paths, and config profiles.
-- [docs/agent/harness.md](docs/agent/harness.md): the live test harness and
-  its check DSL.
+- [docs/agent/harness.md](docs/agent/harness.md): the live sandbox harness
+  (one per worktree) and its scratch-check DSL.
 - [docs/agent/downstream-services.md](docs/agent/downstream-services.md):
   every external service the app calls, and its stub.
 - [docs/agent/testing.md](docs/agent/testing.md): the test layers, where a
@@ -50,21 +50,25 @@ don't commit it. After changing dependencies, run `go mod tidy` (and
 | Regenerate mocks | `make mocks` (mockery v2, configured in `.mockery.yaml`) |
 | Regenerate proto, gateway, and OpenAPI | `make proto`, then `make proto-lint` / `make openapi-lint` |
 | Install dev tools | `make tools` (pinned versions in `scripts/install-tools.sh`) |
-| **Live verify: real binaries + Postgres + Kafka + WireMock** | `make GO=/snap/go/current/bin/go harness-verify` |
-| Re-run some checks against the running harness | `make harness-smoke ARGS='<name-regex>'` |
+| **Live verify in this worktree's sandbox: real binaries + Postgres + Kafka + WireMock, e2e + scratch checks** | `make GO=/snap/go/current/bin/go harness-verify ARGS=--e2e` |
+| Rebuild + restart the sandbox's apps after a code change | `make GO=/snap/go/current/bin/go harness-run` |
+| Re-run scratch checks (`_harness/checks/*.sh`) against the sandbox | `make harness-check ARGS='[<file.sh>] [<name-regex>]'` |
+| E2E scenarios against the sandbox | `make GO=/snap/go/current/bin/go harness-e2e` |
 | Error lines from all apps, known noise filtered | `make harness-logs ARGS=errors` |
 | Outbound calls that matched no stub | `make harness-mocks ARGS=unmatched` |
 | Events published since the last check | `make harness-events` |
 | Break a downstream | `make harness-mocks ARGS="scenario <svc> error\|timeout\|malformed\|empty"` |
-| Migrations on the harness DB | `make harness-migrate ARGS="up"\|"down 1"\|"status"` |
-| Stop the harness / reset everything | `make harness-down` / `make harness-down ARGS=--purge` |
-| E2E scenarios against the running harness | `make test-e2e-harness` (after `harness-verify`) |
+| Migrations on the sandbox DB | `make harness-migrate ARGS="up"\|"down 1"\|"status"` |
+| Stop the sandbox / drop its DB, topics, stubs and slot | `make harness-down` / `make harness-down ARGS=--purge` |
+| Every sandbox on this machine / clean up removed worktrees | `make harness-sandboxes` / `make harness-sandboxes ARGS=gc` |
 | E2E scenarios against any deployment | `E2E_BASE_URL=... [E2E_GRPC_ADDR=...] make test-e2e` |
 | Dev infra (not the harness) | `make docker-up` / `make docker-down` |
 
 `make harness-verify` exits 0 (PASS), 1 (FAIL), or 2 (HARNESS ERROR: the
 harness could not start, so nothing was verified). It writes
-`tmp/harness/report.md` and leaves everything running for inspection.
+`tmp/harness/<sandbox>/report.md` and leaves everything running for
+inspection. The sandbox is named after the worktree directory
+(`SANDBOX=<name>` overrides it).
 
 ## Rules
 
@@ -81,9 +85,15 @@ harness could not start, so nothing was verified). It writes
   with the command you ran and its result.
 - **Integration events are a published contract.** Pinned by
   `tests/contract`. A breaking payload change needs a new version (`v1` → `v2`).
-- **One harness run at a time.** The harness holds a lock in
-  `tmp/harness/.lock`. Only the verifier (or you, in a single-agent loop) runs
-  it. Implementers working in parallel don't.
+- **One sandbox per worktree.** Each worktree gets its own harness sandbox
+  (ports, DB, topics, mock prefix) on shared infra, so parallel features run
+  their harness at the same time. Parallel implementers each work in their own
+  worktree (`isolation: worktree`). Never drive another worktree's sandbox,
+  and never stop the shared infra (`harness-infra-down`) while other
+  sandboxes are registered.
+- **Harness checks are scratch, tests are regression.** `_harness/checks/*.sh`
+  is gitignored and never run by CI. Anything that must stay fixed is a Go
+  test in `tests/` or `internal/testsupport/scenarios`.
 
 ## Definition of done
 
@@ -96,13 +106,16 @@ harness could not start, so nothing was verified). It writes
    reviewed any auto-fix diff.
 3. Generated code (proto, gateway, OpenAPI, mocks) is regenerated, never
    hand-edited, and committed with the change.
-4. Behavior change: `make harness-verify` passes **and** a smoke check in
-   `_harness/smoke/` covers the new behavior (written before the code). A
-   client-visible behavior also gets a scenario in
-   `internal/testsupport/scenarios`, which runs on every profile and in e2e.
-5. New outbound call: a stub in `_harness/mocks/`, a `<SVC>_URL` in
+4. Behavior change: a regression test pins it (written before the code and
+   seen failing): a scenario in `internal/testsupport/scenarios` for anything
+   a client sees (it runs on every profile and in e2e), a `tests/integration`
+   test for side effects, `tests/contract` for event payloads. **And** live
+   proof in your sandbox: `make harness-verify ARGS=--e2e` passes, with
+   scratch checks for the effects you needed to see (rows, events, calls, logs).
+5. New outbound call: a stub in `_harness/mocks/`, a
+   `<SVC>_URL=http://localhost:59999/${HARNESS_MOCK_PREFIX}/<svc>` in
    `_harness/.env.harness`, and a row in `docs/agent/downstream-services.md`.
-6. Migration: applied, rolled back, and re-applied on the harness DB
+6. Migration: applied, rolled back, and re-applied on the sandbox DB
    (`harness-migrate ARGS="down 1"`, then `ARGS=up`).
    `TestMigrations_DownAllThenUpAgain` in `make test-integration` checks this
    for every migration automatically.
@@ -112,17 +125,20 @@ harness could not start, so nothing was verified). It writes
 ## Work loop
 
 For any change in behavior, follow the `implement-and-verify-loop` skill:
-read memory, then plan the checks first, then implement, then run the
-quality gate, then verify live, then review, then update memory. Allow at
+read memory, then write the failing tests (and scratch checks) first, then
+implement, then run the quality gate, then verify live in your sandbox, then
+review, then update memory. Allow at
 most **5** fix iterations, and act on new evidence each time. If the same
 failure shows up twice, stop editing code. Inspect the DB, mocks, events, or
 logs directly instead.
 
 Subagents (`.agents/agents/`):
 
-- `implementer`: one scoped change plus unit tests. Doesn't run the harness.
-- `verifier`: runs the harness and reports PASS / FAIL / HARNESS ERROR with
-  evidence. Has no edit tools.
+- `implementer`: one scoped change plus its tests. Works in its own worktree
+  when run in parallel, and may use that worktree's sandbox for quick checks.
+- `verifier`: runs the sandbox (`harness-verify --e2e`) of the worktree it's
+  given and reports PASS / FAIL / HARNESS ERROR with evidence. Has no edit
+  tools.
 - `reviewer`: read-only review for correctness, contracts, layering, and
   security.
 

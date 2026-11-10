@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# logs: read the app logs of the current harness run.
+# logs: read the app logs of this sandbox's run (wiremock's log is shared).
 #
 # Usage: _harness/scripts/logs.sh                   last 30 lines of every log
 #        _harness/scripts/logs.sh errors [<regex>]  unexpected error lines (known noise

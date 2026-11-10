@@ -29,6 +29,9 @@ type App struct {
 	// API is a REST client pointed at HTTP.
 	API *api.Client
 
+	// Logs holds the app's log lines. Set only with WithLogCapture.
+	Logs *LogRecorder
+
 	// Set only with WithGRPC.
 	GRPCAddr  string
 	Customers customerv1.CustomerServiceClient
@@ -39,6 +42,7 @@ type options struct {
 	mutate     []func(*config.Config)
 	grpc       bool
 	background bool
+	logs       bool
 }
 
 // Option configures NewApp.
@@ -72,6 +76,10 @@ func WithKafka(brokers []string, groupID string) Option {
 	}
 }
 
+// WithLogCapture records the app's log lines (info and up, JSON) in App.Logs
+// instead of writing them to stdout.
+func WithLogCapture() Option { return func(o *options) { o.logs = true } }
+
 // WithGRPC starts the gRPC server on a free local port and dials clients.
 func WithGRPC() Option { return func(o *options) { o.grpc = true } }
 
@@ -99,14 +107,21 @@ func NewApp(t testing.TB, opts ...Option) *App {
 		cfg.GRPC.Addr = FreeAddr(t)
 	}
 
+	var buildOpts []bootstrap.BuildOption
+	var logs *LogRecorder
+	if o.logs {
+		logs = &LogRecorder{}
+		buildOpts = append(buildOpts, bootstrap.WithLogger(logs.logger()))
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-	app, err := bootstrap.Build(ctx, cfg)
+	app, err := bootstrap.Build(ctx, cfg, buildOpts...)
 	if err != nil {
 		cancel()
 		t.Fatalf("bootstrap.Build: %v", err)
 	}
 
-	a := &App{Application: app}
+	a := &App{Application: app, Logs: logs}
 	a.HTTP = httptest.NewServer(app.HTTPHandler())
 	a.API = api.NewClient(a.HTTP.URL)
 

@@ -38,9 +38,30 @@ type Application struct {
 	persistence persistence
 }
 
+// BuildOption tweaks how Build wires the application.
+type BuildOption func(*buildOptions)
+
+type buildOptions struct {
+	logger *slog.Logger
+}
+
+// WithLogger makes the application log through logger instead of one built
+// from cfg.Log (which writes to stdout). Tests use it to assert on log-only
+// side effects.
+func WithLogger(logger *slog.Logger) BuildOption {
+	return func(o *buildOptions) { o.logger = logger }
+}
+
 // Build constructs the application graph from configuration.
-func Build(ctx context.Context, cfg config.Config) (*Application, error) {
-	logger := observability.NewLogger(cfg.Log)
+func Build(ctx context.Context, cfg config.Config, opts ...BuildOption) (*Application, error) {
+	var o buildOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	logger := o.logger
+	if logger == nil {
+		logger = observability.NewLogger(cfg.Log)
+	}
 	logger.Info("building application", "env", cfg.Env)
 
 	bus := newBus(cfg, logger)

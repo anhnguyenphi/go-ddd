@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # events: the event tap. Prints integration events published since the last
-# check started (each check re-marks the tap), across every topic, without
+# check started (each check re-marks the tap), across this sandbox's topics, without
 # joining a consumer group.
 #
 # Usage: _harness/scripts/events.sh [--all] [--raw] [<event-name>]
@@ -21,7 +21,7 @@ for arg in "$@"; do
 	esac
 done
 
-args=(-brokers "$HARNESS_KAFKA_BROKERS")
+args=(-brokers "$HARNESS_KAFKA_BROKERS" -topic-regex "^$KAFKA_TOPIC_PREFIX\\.")
 if ! $all; then
 	[ -f "$HARNESS_TMP/events.mark" ] || die "no check has run yet; use --all"
 	args+=(-since-mark "$HARNESS_TMP/events.mark")

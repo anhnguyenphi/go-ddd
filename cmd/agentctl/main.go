@@ -92,6 +92,7 @@ func runPublish(args []string) error {
 	brokers := fs.String("brokers", "localhost:9092", "comma-separated Kafka brokers")
 	name := fs.String("name", "", "event name, e.g. customer.v1.created (required)")
 	topic := fs.String("topic", "", "override the destination topic (default: derived from -name, matching production)")
+	prefix := fs.String("topic-prefix", "", "topic prefix the app uses (KAFKA_TOPIC_PREFIX); applied to the derived topic")
 	source := fs.String("source", "", "producing context, e.g. customer (default: first dot-segment of -name)")
 	aggregateID := fs.String("aggregate-id", "", "aggregate the event is about (also the partition key)")
 	version := fs.Int("version", 1, "payload schema version")
@@ -137,7 +138,7 @@ func runPublish(args []string) error {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	cfg := kafka.Config{Brokers: splitCSV(*brokers)}
+	cfg := kafka.Config{Brokers: splitCSV(*brokers), TopicFor: kafka.PrefixedTopicFor(*prefix)}
 	if *topic != "" {
 		cfg.TopicFor = func(string) string { return *topic }
 	}
@@ -152,7 +153,7 @@ func runPublish(args []string) error {
 
 	dest := *topic
 	if dest == "" {
-		dest = kafka.DefaultTopicFor(*name)
+		dest = kafka.PrefixedTopicFor(*prefix)(*name)
 	}
 	fmt.Printf("published %s (id=%s aggregate_id=%s) to topic %q\n", e.Name, e.ID, e.AggregateID, dest)
 	return nil
@@ -193,6 +194,7 @@ func runConsume(args []string) error {
 	fs := flag.NewFlagSet("kafka consume", flag.ExitOnError)
 	brokers := fs.String("brokers", "localhost:9092", "comma-separated Kafka brokers")
 	topic := fs.String("topic", "", "topic to read (default: derived from -name, matching production)")
+	prefix := fs.String("topic-prefix", "", "topic prefix the app uses (KAFKA_TOPIC_PREFIX); applied to the derived topic")
 	name := fs.String("name", "", "only print events with this name (also used to derive -topic)")
 	aggregateID := fs.String("aggregate-id", "", "only print events with this aggregate id")
 	count := fs.Int("count", 1, "stop after this many matching messages")
@@ -207,7 +209,7 @@ func runConsume(args []string) error {
 		if *name == "" {
 			return errors.New("one of -topic or -name is required")
 		}
-		t = kafka.DefaultTopicFor(*name)
+		t = kafka.PrefixedTopicFor(*prefix)(*name)
 	}
 
 	startOffset := kafkago.LastOffset

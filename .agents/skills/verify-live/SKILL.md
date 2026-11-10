@@ -1,23 +1,26 @@
 ---
 name: verify-live
-description: Use when asked to test, verify, or prove that a change works end to end (not just unit tests), before claiming a fix or feature is done. Runs the real api and worker against Postgres, Kafka, and mocked downstreams with make harness-verify, and checks the five things that matter. Use it for any feature, not one fixed scenario.
+description: Use when asked to test, verify, or prove that a change works end to end (not just unit tests), before claiming a fix or feature is done. Runs the real api and worker from this worktree in its own harness sandbox (shared Postgres, Kafka, mocked downstreams) with make harness-verify, runs the e2e scenarios and any scratch checks, and checks the five things that matter.
 ---
 
 # Verify live
 
 Full reference: `docs/agent/harness.md`. Always pass `GO=/snap/go/current/bin/go`.
+Everything acts on this worktree's sandbox (named after the worktree
+directory; `SANDBOX=<name>` overrides it). Other worktrees' sandboxes keep
+running undisturbed.
 
 ## Run
 
 ```bash
-make GO=/snap/go/current/bin/go harness-verify                   # all default checks
-make GO=/snap/go/current/bin/go harness-verify ARGS='customer-'  # only matching checks
-make GO=/snap/go/current/bin/go harness-verify ARGS='--suite resilience'
+make GO=/snap/go/current/bin/go harness-verify ARGS=--e2e                 # e2e + every _harness/checks/*.sh
+make GO=/snap/go/current/bin/go harness-verify ARGS='--e2e my-task.sh'    # e2e + one check file
+make GO=/snap/go/current/bin/go harness-verify ARGS='customer-'           # only checks matching a regex
 ```
 
-After a code change with the harness already up, a faster loop is:
+After a code change with the sandbox already up, a faster loop is:
 `make harness-run` (rebuilds and restarts the apps), then
-`make harness-smoke ARGS='<regex>'`.
+`make harness-check ARGS='<regex>'` and/or `make harness-e2e`.
 
 Exit codes: `0` PASS, `1` FAIL, `2` HARNESS ERROR. Exit 2 means nothing
 was verified, so never report it as a test failure or as a pass.
@@ -26,7 +29,7 @@ was verified, so never report it as a test failure or as a pass.
 
 Even when the result is PASS, check:
 
-1. **Response**: `tmp/harness/responses/<check>.json`.
+1. **Response**: `tmp/harness/<sandbox>/responses/<check>.json`.
 2. **Outbound calls**: `make harness-mocks ARGS=requests`. Did the app call
    what it should, with the right body?
 3. **Unmatched calls**: report section, or `make harness-mocks ARGS=unmatched`.
@@ -36,24 +39,26 @@ Even when the result is PASS, check:
 5. **Logs**: `make harness-logs ARGS=errors`. This must be empty, or explained
    by `--expect-errors` or `_harness/known-log-noise.txt`.
 
-## No check covers your change yet?
+## No test covers your change yet?
 
-Add one to `_harness/smoke/checks.sh` first (see "Writing checks" in
-`docs/agent/harness.md`), run it, and see it fail before the fix. A
-behavior change without a check isn't done (AGENTS.md, Definition of done #4).
+The regression test comes first (`docs/agent/testing.md`). A scratch check
+in `_harness/checks/` (copy `example.sh.sample`) lets you watch the live
+effects, but it is never committed and doesn't count as coverage.
 
 ## Ad-hoc poking
 
 ```bash
-curl -s localhost:58080/api/v1/customers?limit=5 | jq .
+eval "$(_harness/scripts/sandboxes.sh env)"     # E2E_BASE_URL, DATABASE_URL, KAFKA_TOPIC_PREFIX, ...
+curl -s "$E2E_BASE_URL/api/v1/customers?limit=5" | jq .
 _harness/scripts/kafka.sh publish -name <ctx>.v1.<event> -aggregate-id <id> -payload '<json>'
 make harness-mocks ARGS='scenario <svc> error'   # then reset: make harness-mocks ARGS=reset
 docker compose -p myapp-harness -f _harness/docker-compose.yml exec -T postgres \
-  psql -U myapp -d myapp_harness -c 'select * from customer_reads limit 5'
+  psql -U myapp -d myapp_sb_<sandbox> -c 'select * from customer_reads limit 5'
 ```
 
 ## Report
 
-Quote the report's `Result:` line, the check counts, and, for each claim,
-the command and the output that backs it. Leave the harness running unless
-told otherwise. `make harness-down` stops it.
+Quote the report's `Result:` and `Sandbox:` lines, the e2e result and check
+counts, and, for each claim, the command and the output that backs it. Leave
+the sandbox running unless told otherwise. `make harness-down` stops it;
+`ARGS=--purge` also drops its data and slot.

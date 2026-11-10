@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # mocks: inspect and steer WireMock, which stands in for every downstream
-# service. Its admin API (${HARNESS_MOCK_URL}/__admin) also works directly.
+# service. WireMock is shared; everything here is scoped to this sandbox's
+# /sb_<name>/ prefix. Its admin API (${HARNESS_MOCK_URL}/__admin) also works directly.
 #
 # Usage: _harness/scripts/mocks.sh requests [<svc>]        requests received (since the last check)
 #        _harness/scripts/mocks.sh unmatched               requests that matched no stub
@@ -31,7 +32,7 @@ case "${1:-requests}" in
 		mock_requests unmatched | jq .
 		;;
 	routes)
-		curl -fsS "$HARNESS_MOCK_URL/__admin/mappings" | jq -r '.mappings[] |
+		mock_sandbox_mappings | jq -r '.mappings[] |
 			"\(.request.method // "ANY") \(.request.url // .request.urlPath // .request.urlPattern // .request.urlPathPattern) -> \(.response.status // 200)  \(.name // "")"'
 		;;
 	scenario)
@@ -41,12 +42,11 @@ case "${1:-requests}" in
 		log "every request under /${svc%/}/ now gets: $3 (undo: make harness-mocks ARGS=reset)"
 		;;
 	scenarios)
-		curl -fsS -X POST "$HARNESS_MOCK_URL/__admin/mappings/find-by-metadata" \
-			-d '{"matchesJsonPath":"$.harnessScenario"}' | jq -r '.mappings[].metadata.harnessScenario'
+		mock_sandbox_mappings | jq -r '.mappings[].metadata.harnessScenario // empty'
 		;;
 	reset)
 		mock_reset
-		log "WireMock reset: scenarios dropped, stubs reloaded from _harness/mocks, journal cleared"
+		log "WireMock reset for this sandbox: scenarios dropped, stubs reloaded from _harness/mocks, journal cleared"
 		;;
 	*)
 		die "unknown command '$1' (want: requests | unmatched | routes | scenario | scenarios | reset)"

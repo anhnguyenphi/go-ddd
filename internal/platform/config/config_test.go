@@ -109,3 +109,23 @@ func TestLoad_Rejects(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_KafkaTopicPrefix(t *testing.T) {
+	isolate(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Kafka.TopicPrefix != "" {
+		t.Errorf("default topic prefix = %q, want empty", cfg.Kafka.TopicPrefix)
+	}
+
+	t.Setenv("KAFKA_TOPIC_PREFIX", "sb_feature_a")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Kafka.TopicPrefix != "sb_feature_a" {
+		t.Errorf("topic prefix = %q, want sb_feature_a", cfg.Kafka.TopicPrefix)
+	}
+}

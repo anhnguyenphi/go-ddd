@@ -136,3 +136,18 @@ func CustomerGRPC(t *testing.T, tg Target) {
 		t.Fatalf("GetCustomer unknown code = %v, want NotFound", status.Code(err))
 	}
 }
+
+// OpenAPI: the generated OpenAPI document is served and lists every
+// context's REST surface.
+func OpenAPI(t *testing.T, tg Target) {
+	m := tg.API.Get(t, "/openapi.json").Expect(t, http.StatusOK).Map(t)
+	paths, ok := m["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("/openapi.json has no paths object: %v", m)
+	}
+	for _, p := range []string{"/api/v1/customers", "/api/v1/orders"} {
+		if _, ok := paths[p]; !ok {
+			t.Errorf("/openapi.json is missing path %s", p)
+		}
+	}
+}

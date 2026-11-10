@@ -18,10 +18,11 @@ func newBus(cfg config.Config, logger *slog.Logger) eventbus.Bus {
 		eventbus.Logging(logger),
 	}
 	if cfg.UseKafka() {
-		logger.Info("event bus: kafka", "brokers", cfg.Kafka.Brokers)
+		logger.Info("event bus: kafka", "brokers", cfg.Kafka.Brokers, "topic_prefix", cfg.Kafka.TopicPrefix)
 		return kafka.New(kafka.Config{
 			Brokers:    cfg.Kafka.Brokers,
 			GroupID:    cfg.Kafka.GroupID,
+			TopicFor:   kafka.PrefixedTopicFor(cfg.Kafka.TopicPrefix),
 			MaxRetries: cfg.Kafka.MaxRetries,
 			Backoff:    kafka.ExponentialBackoff(cfg.Kafka.RetryBaseDelay, cfg.Kafka.RetryMaxDelay),
 		}, logger, mw...)

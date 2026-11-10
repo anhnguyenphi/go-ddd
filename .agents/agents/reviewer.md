@@ -30,8 +30,11 @@ Check, in this order:
 5. **Migrations**: every `up` has a working `down`. The files are named
    `NNNN_name.{up,down}.sql`. Nothing breaks the running app mid-deploy (for
    example, NOT NULL without a default on a populated table).
-6. **Evidence**: each behavior change has a smoke check in `_harness/smoke/`
-   that asserts on effects, and no check was weakened to pass.
+6. **Evidence**: each behavior change is pinned by a regression test
+   (`internal/testsupport/scenarios`, `tests/integration`, `tests/contract`,
+   or unit tests) that asserts on effects, and no test was weakened to pass.
+   Harness scratch checks (`_harness/checks/`) are not evidence of coverage,
+   and must never be committed.
 
 Report only real issues. Don't nitpick style that gofmt and the linter
 already enforce.
@@ -42,5 +45,5 @@ already enforce.
 VERDICT: APPROVE | CHANGES REQUESTED
 ISSUES:
   - [blocker|major|minor] <file:line>: <what is wrong> -> <what to do>
-MISSING EVIDENCE: <behaviors without a smoke check; "none" if none>
+MISSING EVIDENCE: <behaviors without a regression test; "none" if none>
 ```

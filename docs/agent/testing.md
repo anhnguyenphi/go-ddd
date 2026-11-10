@@ -13,11 +13,16 @@ layer. The live harness has its own guide: [harness.md](harness.md).
 | Integration (memory) | `tests/integration` | `integration` | none | `make test-integration-short` | The whole app in-process (`bootstrap.Build`), in-memory profile |
 | Integration (infra) | `tests/integration` | `integration` | testcontainers | `make test-integration` | Real Postgres 16 + Redpanda: SQL adapters, migrations, Kafka retry/DLQ, every profile |
 | E2E | `tests/e2e` | `e2e` | a running deployment | `make test-e2e-harness` / `E2E_BASE_URL=... make test-e2e` | Black-box scenarios against real binaries (harness, staging) |
-| Harness smoke | `_harness/smoke` | (bash) | compose | `make harness-verify` | Agent loop: logs, outbound calls, events on topics |
 
 `scripts/check.sh` runs unit, arch, contract and the memory integration
 profile. CI (`.github/workflows/ci.yml`) also runs the infra integration suite
-with `REQUIRE_INFRA=1`, and the harness plus e2e.
+with `REQUIRE_INFRA=1`, and the e2e suite against the real binaries in a
+harness sandbox (`SANDBOX=ci make harness-verify ARGS=--e2e`).
+
+**These layers are the regression suite.** The harness
+([harness.md](harness.md)) is a different thing: a live sandbox per worktree
+where an agent sees its change working. Its `check` files are scratch
+(gitignored, never run by CI). Anything that must stay fixed is a test here.
 
 ## Write a scenario once, run it everywhere
 
@@ -51,7 +56,10 @@ It's then covered on all three profiles and in e2e with no other change.
 - A migration: nothing to add. `TestMigrations_DownAllThenUpAgain` runs every
   migration down and up again.
 - Behavior a client can see: a scenario in `internal/testsupport/scenarios`.
-  For the agent loop it also needs a smoke check (`_harness/smoke/`).
+- A side effect a client can't see (a notification, a cross-context reaction,
+  a log-only adapter): a `tests/integration` test. `testsupport.WithLogCapture()`
+  records the app's log lines in `app.Logs` (`Await(t, regex, timeout)`), as
+  in `side_effects_test.go`.
 - Kafka delivery semantics (retries, DLQ, ordering): `tests/integration/kafka_test.go`.
   Use `newIsolatedBus`, which gives you unique topics.
 
@@ -59,7 +67,7 @@ It's then covered on all three profiles and in e2e with no other change.
 
 | Package | Use |
 |---|---|
-| `testsupport` | `NewApp(t, WithPostgres(dsn), WithKafka(brokers, group), WithGRPC(), WithBackground())` returns a running app plus a REST client and gRPC clients. It always starts from `config.Default()`, so `configs/config.json` is never read. |
+| `testsupport` | `NewApp(t, WithPostgres(dsn), WithKafka(brokers, group), WithGRPC(), WithBackground(), WithLogCapture())` returns a running app plus a REST client and gRPC clients (and `app.Logs` with `WithLogCapture`). It always starts from `config.Default()`, so `configs/config.json` is never read. |
 | `testsupport/containers` | `PostgresDSN(t)` / `PostgresDB(t)` give you a fresh migrated database per test (cloned from a template in milliseconds). `KafkaBrokers(t)` and `UniqueGroupID(t)` cover Kafka. Wire `TestMain` to `containers.RunMain`. |
 | `testsupport/api` | `Client` (`Get`/`Post`/`Patch`, `.Expect(t, 200)`), `Eventually`, `AwaitCustomer`, `UniqueEmail`. It never imports the app. |
 | `testsupport/scenarios` | Shared black-box scenarios (see above). |

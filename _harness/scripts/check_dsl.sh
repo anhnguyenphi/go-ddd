@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# The smoke-check DSL. Sourced by smoke.sh (after lib.sh); the check files in
-# _harness/smoke/ are plain bash that call `check` once per behavior.
+# The check DSL. Sourced by check.sh (after lib.sh); check files are plain
+# bash that call `check` once per behavior.
+#
+# Checks are SCRATCH: a quick way for an agent to poke its own change in its
+# own sandbox (status, rows, events, outbound calls, log lines) while it works.
+# They are not regression tests: they live in _harness/checks/*.sh, which is
+# gitignored, and CI never runs them. Behavior that must stay fixed gets a test
+# in tests/ or internal/testsupport/scenarios (docs/agent/testing.md).
 #
 # A check is one acceptance criterion: reset the probes, fire ONE trigger, then
 # poll every positive probe until all hold (or --timeout), then assert the
 # negative probes, then assert that no request reached WireMock unstubbed.
+# Every probe is scoped to this sandbox (its DB, topics, mock prefix, logs).
 #
 #   check --name <id>                          required, unique, kebab-case
 #     trigger (exactly one):
@@ -12,12 +19,13 @@
 #                                              HTTP request to the api. GET/HEAD are
 #                                              re-sent on every poll; other methods are sent once.
 #       --produce <event-name> --key <aggregate-id> --body <json-payload>
-#                                              produce an integration event to Kafka exactly as
-#                                              the app would (agentctl kafka publish)
+#                                              produce an integration event to this sandbox's
+#                                              topics exactly as the app would (agentctl kafka publish)
 #     positive probes (polled until they all hold):
 #       --status <code>                        HTTP status
 #       --jq <expr>                            jq expression over the response body must be true
-#       --calls '<METHOD> <path>'              the app called WireMock (path may end in *)
+#       --calls '<METHOD> <path>'              the app called WireMock (path without the sandbox
+#                                              prefix, e.g. 'POST /payments/v1/charges'; may end in *)
 #       --events <name>[@<aggregate-id>]       an integration event was published
 #       --await '<sql>' '<value>'              first column of the first row equals value
 #       --logs <regex>                         a new api/worker log line matches (grep -E)
@@ -33,9 +41,9 @@
 #                                              counted as unexpected in the report
 #       --timeout <seconds>                    default $HARNESS_CHECK_TIMEOUT (15)
 #
-# Results are appended to tmp/harness/results.tsv; responses are saved in
-# tmp/harness/responses/<name>.json; a failing check's evidence is written to
-# tmp/harness/checks/<name>.txt.
+# Results are appended to tmp/harness/<sandbox>/results.tsv; responses are
+# saved in tmp/harness/<sandbox>/responses/<name>.json; a failing check's
+# evidence is written to tmp/harness/<sandbox>/checks/<name>.txt.
 
 HARNESS_CHECK_TIMEOUT="${HARNESS_CHECK_TIMEOUT:-15}"
 HARNESS_SETTLE="${HARNESS_SETTLE:-1.5}"
@@ -85,11 +93,11 @@ _check_new_logs() { # [raw] — lines logged since the check started; "raw" drop
 	done
 }
 
-_check_events() { # [topic-regex] [extra agentctl args...]
+_check_events() { # [topic-suffix-regex] [extra agentctl args...] — this sandbox's topics only
 	local re="${1:-\\.events\$}"
 	shift || true
 	agentctl kafka events -brokers "$HARNESS_KAFKA_BROKERS" \
-		-since-mark "$HARNESS_TMP/events.mark" -topic-regex "$re" "$@" 2>&1
+		-since-mark "$HARNESS_TMP/events.mark" -topic-regex "^$KAFKA_TOPIC_PREFIX\\..*$re" "$@" 2>&1
 }
 
 check() {
@@ -170,7 +178,7 @@ check() {
 	if [ -n "$produce" ]; then
 		local puberr
 		if ! puberr="$(agentctl kafka publish -brokers "$HARNESS_KAFKA_BROKERS" \
-			-name "$produce" -aggregate-id "$key" -payload "$body" 2>&1)"; then
+			-topic-prefix "$KAFKA_TOPIC_PREFIX" -name "$produce" -aggregate-id "$key" -payload "$body" 2>&1)"; then
 			_check_record "$name" FAIL $((SECONDS - started)) "produce $produce failed: $puberr"
 			return 0
 		fi

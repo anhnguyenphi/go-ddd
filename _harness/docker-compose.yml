@@ -1,13 +1,15 @@
-# Harness dependencies: the real datastore and broker, plus WireMock standing
-# in for every downstream HTTP service. The apps (api, worker) run on the
-# host, built from the working tree, so every iteration is a rebuild rather
-# than an image build.
+# Shared harness infra: the real datastore and broker, plus WireMock standing
+# in for every downstream HTTP service. ONE stack per machine, shared by every
+# sandbox (one per worktree). Each sandbox gets its own slice: a database
+# (myapp_sb_<name>), Kafka topics (sb_<name>.*) and consumer group, and a
+# WireMock path prefix (/sb_<name>/). Its api and worker run on the host,
+# built from its worktree, on their own ports. See _harness/scripts/lib.sh.
 #
 # Isolated from the dev stack in deployments/docker on purpose: its own
-# project name, ports (5xxxx) and volume, so a harness run never touches a
+# project name, ports (5xxxx) and volume, so the harness never touches a
 # developer's local database and both can run side by side.
 #
-# Driven by _harness/scripts/*.sh; don't `docker compose up` it by hand.
+# Driven by _harness/scripts/*.sh (infra.sh); don't `docker compose up` it by hand.
 
 name: myapp-harness
 
@@ -17,6 +19,7 @@ services:
     environment:
       POSTGRES_USER: myapp
       POSTGRES_PASSWORD: harness-fake-password
+      # Only the maintenance DB; each sandbox creates its own myapp_sb_<name>.
       POSTGRES_DB: myapp_harness
     ports:
       - "55432:5432"
@@ -49,10 +52,11 @@ services:
       timeout: 5s
       retries: 30
 
-  # One path prefix per downstream service (e.g. /payments/...). Stubs are the
-  # files in _harness/mocks, pushed in through the admin API (/__admin) by
-  # up.sh, not mounted: see mock_reset in scripts/lib.sh. Anything unstubbed
-  # gets a 404 and is journaled as unmatched, which fails the harness run.
+  # One path prefix per sandbox, then per downstream service
+  # (/sb_<name>/payments/...). Stubs are the files in _harness/mocks, pushed in
+  # through the admin API (/__admin) by up.sh with the sandbox prefix added,
+  # not mounted: see mock_reset in scripts/lib.sh. Anything unstubbed gets a
+  # 404 and is journaled as unmatched, which fails that sandbox's run.
   wiremock:
     image: wiremock/wiremock:3.9.1
     command: ["--disable-banner"]

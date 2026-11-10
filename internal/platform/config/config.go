@@ -53,6 +53,10 @@ type KafkaConfig struct {
 	// Brokers empty => the in-process bus is used instead of Kafka.
 	Brokers []string `json:"brokers"`
 	GroupID string   `json:"group_id"`
+	// TopicPrefix, when set, is put in front of every topic name
+	// ("<prefix>.customer.v1.events"), so several deployments can share one
+	// cluster. Empty (the default) uses the plain topic names.
+	TopicPrefix string `json:"topic_prefix"`
 
 	// MaxRetries is how many retry-topic hops a failed message gets before it
 	// is dead-lettered.
@@ -150,6 +154,7 @@ func applyEnv(cfg *Config) {
 		cfg.Kafka.Brokers = strings.Split(v, ",")
 	}
 	setStr(&cfg.Kafka.GroupID, "KAFKA_GROUP_ID")
+	setStr(&cfg.Kafka.TopicPrefix, "KAFKA_TOPIC_PREFIX")
 	setInt(&cfg.Kafka.MaxRetries, "KAFKA_MAX_RETRIES")
 	setDur(&cfg.Kafka.RetryBaseDelay, "KAFKA_RETRY_BASE_DELAY")
 	setDur(&cfg.Kafka.RetryMaxDelay, "KAFKA_RETRY_MAX_DELAY")

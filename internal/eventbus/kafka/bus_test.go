@@ -78,3 +78,28 @@ func TestMiddlewareWrapsSubscribedHandlers(t *testing.T) {
 		t.Error("middleware did not run around the subscribed handler")
 	}
 }
+
+func TestPrefixedTopicFor(t *testing.T) {
+	cases := []struct{ prefix, event, want string }{
+		{"", "customer.v1.created", "customer.v1.events"},
+		{"sb_feature_a", "customer.v1.created", "sb_feature_a.customer.v1.events"},
+		{"sb_x", "order.v1.placed", "sb_x.order.v1.events"},
+	}
+	for _, c := range cases {
+		if got := PrefixedTopicFor(c.prefix)(c.event); got != c.want {
+			t.Errorf("PrefixedTopicFor(%q)(%q) = %q, want %q", c.prefix, c.event, got, c.want)
+		}
+	}
+}
+
+func TestPrefixedTopicsDeriveRetryAndDLQ(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	b := New(Config{TopicFor: PrefixedTopicFor("sb_x"), MaxRetries: 1}, logger)
+	topic := b.cfg.TopicFor("customer.v1.created")
+	if got := b.cfg.RetryTopicFor(topic, 1); got != "sb_x.customer.v1.events.retry.1" {
+		t.Errorf("retry topic = %q", got)
+	}
+	if got := b.cfg.DLQTopicFor(topic); got != "sb_x.customer.v1.events.dlq" {
+		t.Errorf("dlq topic = %q", got)
+	}
+}

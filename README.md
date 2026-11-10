@@ -252,16 +252,21 @@ application code changes.
 
 ## Agent harness
 
-AI agents (and humans) prove changes against a real, disposable copy of the
-service, not just in-memory unit tests. There are two layers, both in this repo:
+AI agents (and humans) see their change working against a real, disposable
+copy of the service, not just in-memory unit tests. Regression stays in
+`tests/` (see [docs/agent/testing.md](docs/agent/testing.md)); the harness is
+the live **sandbox** for the dev loop. There are two layers, both in this repo:
 
-- **Runtime harness** ([_harness/](_harness)): `make harness-verify` builds
-  `api` and `worker` from the working tree, runs them against real Postgres
-  and Redpanda, and fakes every downstream HTTP service with WireMock. It
-  then runs declarative smoke checks that assert on the response, outbound
-  calls, published events, DB rows, and log lines. The result is one exit
-  code and a report in `tmp/harness/report.md`. Any outbound call that
-  matches no stub fails the run.
+- **Runtime harness** ([_harness/](_harness)): each git worktree gets its own
+  sandbox. `make harness-verify ARGS=--e2e` builds `api` and `worker` from that
+  worktree and runs them on their own ports against shared Postgres, Redpanda,
+  and WireMock, each sliced per sandbox (its own database, topic prefix and
+  consumer group, and mock path prefix). So parallel features verify at the
+  same time without interfering. It runs the e2e scenarios plus the agent's
+  scratch checks (`_harness/checks/*.sh`, gitignored), which assert on the
+  response, outbound calls, published events, DB rows, and log lines. The
+  result is one exit code and a report in `tmp/harness/<sandbox>/report.md`.
+  Any outbound call that matches no stub fails the run.
 - **Agent layer**: [AGENTS.md](AGENTS.md) (commands, rules, definition of
   done, work loop; `CLAUDE.md` imports it), subagents and skills in
   [.agents/](.agents), and
@@ -269,28 +274,28 @@ service, not just in-memory unit tests. There are two layers, both in this repo:
 
 ```mermaid
 flowchart LR
-    subgraph driver["agent / developer"]
+    subgraph driver["agent / developer, in worktree feature-a"]
         direction TB
         make["make harness-*"]
-        smoke["smoke checks<br/>_harness/smoke/*.sh"]
+        checks["e2e scenarios +<br/>scratch checks _harness/checks/*.sh"]
     end
 
-    subgraph host["host processes, built from the working tree"]
+    subgraph host["host processes of sandbox feature_a, built from that worktree"]
         direction TB
-        api["api :58080<br/>REST + gRPC<br/>in-memory outbox + relay"]
+        api["api :58100+10·slot<br/>REST + gRPC<br/>in-memory outbox + relay"]
         worker["worker<br/>consumer loop"]
     end
 
-    subgraph compose["docker compose · myapp-harness"]
+    subgraph compose["shared infra · docker compose myapp-harness (one per machine)"]
         direction TB
-        pg[("Postgres :55432")]
-        kafka{{"Redpanda :59092<br/>*.events · .retry.1 · .dlq"}}
-        wiremock["WireMock :59999<br/>one prefix per downstream"]
+        pg[("Postgres :55432<br/>db myapp_sb_feature_a")]
+        kafka{{"Redpanda :59092<br/>sb_feature_a.*.events · .retry.1 · .dlq"}}
+        wiremock["WireMock :59999<br/>/sb_feature_a/&lt;svc&gt;/..."]
     end
 
-    make --> smoke
-    smoke -- "HTTP trigger" --> api
-    smoke == "--produce (agentctl)" ==> kafka
+    make --> checks
+    checks -- "HTTP trigger" --> api
+    checks == "--produce (agentctl)" ==> kafka
     api -- "aggregate + read model" --> pg
     api -- "relay publishes" --> kafka
     kafka -- "consumer group" --> api
@@ -298,23 +303,24 @@ flowchart LR
     worker -- "projection" --> pg
     api -. "downstream calls" .-> wiremock
     worker -. "downstream calls" .-> wiremock
-    smoke -. "probes: --await SQL" .-> pg
-    smoke -. "probes: --events (event tap)" .-> kafka
-    smoke -. "probes: --calls, unmatched" .-> wiremock
+    checks -. "probes: --await SQL" .-> pg
+    checks -. "probes: --events (event tap)" .-> kafka
+    checks -. "probes: --calls, unmatched" .-> wiremock
 
     classDef harness fill:#fef3c7,stroke:#b45309,color:#78350f;
-    class make,smoke,wiremock harness;
+    class make,checks,wiremock harness;
 ```
 
 ```bash
-make GO=/snap/go/current/bin/go harness-verify   # up, migrate, seed, run, smoke, report; exit 0 / 1 / 2
-make harness-logs ARGS=errors                    # error lines from all apps, known noise filtered
+make GO=/snap/go/current/bin/go harness-verify ARGS=--e2e   # this worktree's sandbox: up, migrate, seed, run, e2e, checks, report
+make harness-logs ARGS=errors                    # error lines from this sandbox's apps, known noise filtered
 make harness-mocks ARGS=unmatched                # outbound calls with no stub
 make harness-events                              # events published since the last check
-make harness-mocks ARGS="scenario <svc> error"   # break a downstream (error|timeout|malformed|empty)
-make harness-down ARGS=--purge                   # reset everything
+make harness-mocks ARGS="scenario <svc> error"   # break a downstream for this sandbox only
+make harness-sandboxes                           # every sandbox on this machine
+make harness-down ARGS=--purge                   # drop this sandbox
 ```
 
-[docs/agent/harness.md](docs/agent/harness.md) covers the pipeline, the
-check DSL, and how to extend the harness. The `verify-live` and
+[docs/agent/harness.md](docs/agent/harness.md) covers the sandbox model, the
+pipeline, the check DSL, and how to extend the harness. The `verify-live` and
 `implement-and-verify-loop` skills say when and how an agent uses it.

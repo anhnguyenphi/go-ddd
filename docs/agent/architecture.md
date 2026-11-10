@@ -75,10 +75,14 @@ env vars. See [config.go](../../internal/platform/config/config.go).
   `CONFIG_PATH=_harness/config.harness.json` (an empty `{}`).
 - JSON duration fields are nanosecond integers. Env vars take Go durations (`1s`).
 
-| | Dev (`configs/config.json`, `make docker-up`) | Harness (`_harness/.env.harness`) |
+| | Dev (`configs/config.json`, `make docker-up`) | Harness sandbox `<name>` (derived in `_harness/scripts/lib.sh`) |
 |---|---|---|
-| REST / gRPC | `:8080` / `:9090` | `:58080` / `:59090` |
-| Postgres | `localhost:5432/myapp` | `localhost:55432/myapp_harness` |
-| Kafka | `localhost:9092` | `localhost:59092` |
-| WireMock (downstream stubs) | — | `:59999` |
-| Compose project | `myapp` | `myapp-harness` |
+| REST / gRPC | `:8080` / `:9090` | `:58100+10·slot` / `:58101+10·slot` |
+| Postgres | `localhost:5432/myapp` | `localhost:55432/myapp_sb_<name>` |
+| Kafka | `localhost:9092`, plain topic names | `localhost:59092`, `KAFKA_TOPIC_PREFIX=sb_<name>`, group `myapp-sb-<name>` |
+| WireMock (downstream stubs) | — | `:59999`, under `/sb_<name>/` |
+| Compose project | `myapp` | `myapp-harness` (shared by every sandbox) |
+
+`KAFKA_TOPIC_PREFIX` (default empty) puts `<prefix>.` in front of every topic,
+retry topic, and DLQ (`kafka.PrefixedTopicFor`). That's how several
+deployments share one cluster; production leaves it empty.

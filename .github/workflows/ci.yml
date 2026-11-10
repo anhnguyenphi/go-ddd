@@ -3,7 +3,8 @@
 #   lint         golangci-lint (pinned in scripts/install-tools.sh), all build tags
 #   unit         unit + arch + contract + in-memory integration
 #   integration  integration against real Postgres + Redpanda (testcontainers)
-#   e2e          the live harness (real binaries) + the black-box e2e suite
+#   e2e          the black-box e2e suite against real binaries, run in a harness
+#                sandbox (no scratch checks: regression lives in tests/)
 #   vuln         govulncheck
 name: ci
 
@@ -58,33 +59,26 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    env:
+      SANDBOX: ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: harness verify (smoke checks against real binaries)
-        run: make GO="$(which go)" harness-verify
-      - name: e2e scenarios against the harness
-        run: make test-e2e-harness
+      # Scratch checks are gitignored, so in CI this runs exactly: a sandbox
+      # (real api + worker, Postgres, Redpanda, WireMock), tests/e2e against
+      # it, and the gates (no unmatched downstream calls, no unexpected errors).
+      - name: e2e scenarios in a harness sandbox
+        run: make GO="$(which go)" harness-verify ARGS=--e2e
       - name: harness report
         if: always()
-        run: cat tmp/harness/report.md 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || true
+        run: cat tmp/harness/ci/report.md 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || true
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: harness
-          path: tmp/harness/
+          path: tmp/harness/ci/
           if-no-files-found: ignore
       - if: always()
-        run: make harness-down
-
-  vuln:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: scripts/install-tools.sh vuln
-      - run: $(go env GOPATH)/bin/govulncheck ./...
+        run: make harness-down ARGS=--purge

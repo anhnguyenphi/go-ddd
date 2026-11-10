@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# report: turn the last smoke run into tmp/harness/report.md and print it.
+# report: turn this sandbox's last run into tmp/harness/<sandbox>/report.md
+# and print it.
 #
-# The run passes only when every check passed, at least one check ran, no
-# request reached WireMock unstubbed, and the app logs have no
-# unexpected error lines. A setup failure (HARNESS_SETUP_ERROR, set by
+# The run passes only when every check passed, something behavioral ran (at
+# least one check, or the e2e suite), e2e passed if it ran, no request reached
+# WireMock unstubbed, and the app logs have no unexpected error lines. A setup failure (HARNESS_SETUP_ERROR, set by
 # verify.sh) is reported as HARNESS ERROR: the harness broke, not the code.
 #
 # Usage: _harness/scripts/report.sh
@@ -33,12 +34,19 @@ errors="$(error_lines)"
 error_count="$(printf '%s' "$errors" | grep -c . || true)"
 
 schema="$(psql_q "SELECT coalesce(max(version), 'none') FROM schema_migrations" 2>/dev/null || echo unknown)"
-meta="$(tr '\n' ' ' 2>/dev/null <"$HARNESS_TMP/smoke.meta" || true)"
+meta="$(tr '\n' ' ' 2>/dev/null <"$HARNESS_TMP/check.meta" || true)"
+
+e2e_code="" e2e_secs=""
+if [ -f "$HARNESS_TMP/e2e.status" ]; then
+	IFS="$(printf '\t')" read -r e2e_code e2e_secs <"$HARNESS_TMP/e2e.status" || true
+fi
 
 if [ -n "$setup_error" ]; then
 	result="HARNESS ERROR"
 	code=2
-elif [ "$failed" = 0 ] && [ "$passed" -gt 0 ] && [ "$unmatched_count" = 0 ] && [ "$error_count" = 0 ]; then
+elif [ "$failed" = 0 ] && { [ "$passed" -gt 0 ] || [ -n "$e2e_code" ]; } &&
+	{ [ -z "$e2e_code" ] || [ "$e2e_code" = 0 ]; } &&
+	[ "$unmatched_count" = 0 ] && [ "$error_count" = 0 ]; then
 	result="PASS"
 	code=0
 else
@@ -47,15 +55,28 @@ else
 fi
 
 {
-	echo "# Harness report"
+	echo "# Harness sandbox report: $SANDBOX"
 	echo
 	echo '```'
 	echo "Result: $result   Git: $(git_summary)"
+	echo "Sandbox: $SANDBOX (slot ${HARNESS_SLOT:-?}, api ${HARNESS_API_URL:-?}, db $HARNESS_PG_DB, topics $KAFKA_TOPIC_PREFIX.*)"
 	echo "Schema: $schema   Run: $(date -u +%Y-%m-%dT%H:%M:%SZ)   $meta"
 	[ -n "$setup_error" ] && echo "Setup failed at: $setup_error (see the verify output above it)"
 	echo '```'
 	echo
-	echo "## Smoke checks"
+	echo "## E2E (tests/e2e against this sandbox)"
+	echo
+	if [ -z "$e2e_code" ]; then
+		echo "Not run (harness-verify ARGS=--e2e, or make harness-e2e)."
+	else
+		[ "$e2e_code" = 0 ] && echo "PASS (${e2e_secs}s)" || echo "FAIL (exit $e2e_code, ${e2e_secs}s): see $HARNESS_TMP/e2e.txt"
+		echo
+		echo '```'
+		grep -E '^(--- FAIL|FAIL|ok|panic)' "$HARNESS_TMP/e2e.txt" 2>/dev/null | head -n 30
+		echo '```'
+	fi
+	echo
+	echo "## Scratch checks (_harness/checks, not regression)"
 	echo
 	echo '```'
 	if [ -s "$results" ]; then
@@ -65,6 +86,10 @@ fi
 	fi
 	echo "... $passed passed, $failed failed"
 	echo '```'
+	if [ "$passed" = 0 ] && [ "$failed" = 0 ] && [ -z "$e2e_code" ]; then
+		echo
+		echo "Nothing behavioral ran: write a check in _harness/checks/ or pass --e2e."
+	fi
 	echo
 	echo "## Unmatched downstream requests"
 	echo

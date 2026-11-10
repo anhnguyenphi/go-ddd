@@ -85,9 +85,8 @@ test-e2e: ## E2E scenarios against a running deployment (needs E2E_BASE_URL; E2E
 	$(GO) test -count=1 -tags=e2e ./tests/e2e/...
 
 .PHONY: test-e2e-harness
-test-e2e-harness: ## E2E scenarios against the running harness (run harness-verify first)
-	E2E_BASE_URL=http://localhost:58080 E2E_GRPC_ADDR=localhost:59090 \
-		$(GO) test -count=1 -tags=e2e ./tests/e2e/...
+test-e2e-harness: ## E2E scenarios against this worktree's running harness sandbox (same as harness-e2e)
+	GO=$(GO) _harness/scripts/e2e.sh $(ARGS)
 
 .PHONY: test-all
 test-all: test test-contract test-integration ## Unit, arch, contract and integration (everything but the harness)
@@ -122,52 +121,70 @@ docker-up: ## Start local infra (postgres, kafka)
 docker-down: ## Stop local infra
 	docker compose -f deployments/docker/docker-compose.yml down -v
 
-# ---- Harness: the real binaries + Postgres + Redpanda + WireMock, checked live ----
-# See docs/agent/harness.md. Everything lands in tmp/harness/ (report.md, logs).
+# ---- Harness: a live SANDBOX per worktree (real binaries + shared Postgres/Redpanda/WireMock) ----
+# See docs/agent/harness.md. It's the agent's dev loop, not regression (that is
+# tests/). The sandbox defaults to the worktree's name; override with SANDBOX=<name>.
+# Output lands in tmp/harness/<sandbox>/ (report.md, logs).
 
 .PHONY: harness-verify
-harness-verify: ## Harness: up, migrate, seed, run, smoke, report; exit 0 PASS / 1 FAIL / 2 HARNESS ERROR (ARGS="<regex>" or "--suite <name>")
+harness-verify: ## Sandbox: up, migrate, seed, run, [e2e], scratch checks, report; exit 0 PASS / 1 FAIL / 2 HARNESS ERROR (ARGS="[--e2e] [<file.sh>] [<regex>]")
 	GO=$(GO) _harness/scripts/verify.sh $(ARGS)
 
 .PHONY: harness-up
-harness-up: ## Harness: start Postgres + Redpanda + WireMock, create topics, reload the stubs
+harness-up: ## Sandbox: start the shared infra if needed, then this sandbox's slot, DB, topics and stubs
 	GO=$(GO) _harness/scripts/up.sh
 
 .PHONY: harness-migrate
-harness-migrate: ## Harness: migrations on the harness DB (ARGS="up" | "down 1" | "status")
+harness-migrate: ## Sandbox: migrations on this sandbox's DB (ARGS="up" | "down 1" | "status")
 	GO=$(GO) _harness/scripts/migrate.sh $(ARGS)
 
 .PHONY: harness-seed
-harness-seed: ## Harness: (re)load the idempotent fixtures in _harness/seed
+harness-seed: ## Sandbox: (re)load the idempotent fixtures in _harness/seed
 	GO=$(GO) _harness/scripts/seed.sh
 
 .PHONY: harness-run
-harness-run: ## Harness: rebuild and restart api + worker from the working tree
+harness-run: ## Sandbox: rebuild and restart api + worker from the working tree
 	GO=$(GO) _harness/scripts/run.sh
 
-.PHONY: harness-smoke
-harness-smoke: ## Harness: re-run smoke checks against the running apps (ARGS="<regex>" or "--suite <name>")
-	GO=$(GO) _harness/scripts/smoke.sh $(ARGS)
+.PHONY: harness-check
+harness-check: ## Sandbox: re-run scratch checks (_harness/checks/*.sh) against the running apps (ARGS="[<file.sh>] [<regex>]")
+	GO=$(GO) _harness/scripts/check.sh $(ARGS)
+
+.PHONY: harness-e2e
+harness-e2e: ## Sandbox: run tests/e2e (the regression scenarios) against the running apps (ARGS="-run ...")
+	GO=$(GO) _harness/scripts/e2e.sh $(ARGS)
 
 .PHONY: harness-logs
-harness-logs: ## Harness: app logs (ARGS="errors [regex]" | "<app> [n]")
+harness-logs: ## Sandbox: app logs (ARGS="errors [regex]" | "<app> [n]" | wiremock)
 	GO=$(GO) _harness/scripts/logs.sh $(ARGS)
 
 .PHONY: harness-mocks
-harness-mocks: ## Harness: WireMock (ARGS="requests [svc]" | unmatched | routes | "scenario <svc> <kind>" | reset)
+harness-mocks: ## Sandbox: WireMock, scoped to this sandbox (ARGS="requests [svc]" | unmatched | routes | "scenario <svc> <kind>" | reset)
 	GO=$(GO) _harness/scripts/mocks.sh $(ARGS)
 
 .PHONY: harness-events
-harness-events: ## Harness: events published since the last check (ARGS="--all" | "--raw" | <event-name>)
+harness-events: ## Sandbox: events published since the last check (ARGS="--all" | "--raw" | <event-name>)
 	GO=$(GO) _harness/scripts/events.sh $(ARGS)
 
 .PHONY: harness-kafka
-harness-kafka: ## Harness: agentctl kafka against the harness broker (ARGS="publish -name ..." | topics)
+harness-kafka: ## Sandbox: agentctl kafka on this sandbox's topics (ARGS="publish -name ..." | topics)
 	GO=$(GO) _harness/scripts/kafka.sh $(ARGS)
 
 .PHONY: harness-down
-harness-down: ## Harness: stop apps and dependencies (ARGS=--purge also drops data, logs and the report)
+harness-down: ## Sandbox: stop this sandbox's apps (ARGS=--purge also drops its DB, topics, stubs, slot and tmp dir)
 	GO=$(GO) _harness/scripts/down.sh $(ARGS)
+
+.PHONY: harness-sandboxes
+harness-sandboxes: ## Harness: list every sandbox on this machine (ARGS=gc purges those whose worktree is gone | env)
+	GO=$(GO) _harness/scripts/sandboxes.sh $(ARGS)
+
+.PHONY: harness-infra-up
+harness-infra-up: ## Harness: start the shared Postgres + Redpanda + WireMock
+	GO=$(GO) _harness/scripts/infra.sh up
+
+.PHONY: harness-infra-down
+harness-infra-down: ## Harness: stop the shared infra (refuses while sandboxes exist; ARGS="--force [--purge]")
+	GO=$(GO) _harness/scripts/infra.sh down $(ARGS)
 
 .PHONY: clean
 clean: ## Remove build artifacts

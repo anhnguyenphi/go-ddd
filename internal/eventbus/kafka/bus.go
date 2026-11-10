@@ -84,6 +84,18 @@ func (c *Config) setDefaults() {
 // right topic without duplicating or drifting from the real mapping.
 func DefaultTopicFor(eventName string) string { return defaultTopicFor(eventName) }
 
+// PrefixedTopicFor returns a Config.TopicFor that puts "<prefix>." in front of
+// the default topic, e.g. "sb_x" + "customer.v1.created" -> "sb_x.customer.v1.events".
+// Retry and DLQ topics derive from it. An empty prefix gives the default
+// mapping. It lets several deployments (e.g. harness sandboxes) share one
+// cluster without seeing each other's messages.
+func PrefixedTopicFor(prefix string) func(eventName string) string {
+	if prefix == "" {
+		return defaultTopicFor
+	}
+	return func(eventName string) string { return prefix + "." + defaultTopicFor(eventName) }
+}
+
 func defaultTopicFor(eventName string) string {
 	// "customer.v1.created" -> "customer.v1.events"
 	for i := 0; i < len(eventName); i++ {

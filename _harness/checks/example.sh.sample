@@ -1,0 +1,48 @@
+# A tour of the check DSL. Copy to <anything>.sh in this directory to run it:
+#   cp _harness/checks/example.sh.sample _harness/checks/tour.sh
+#   make harness-verify            # or, with the sandbox up: make harness-check
+#
+# Fixtures from _harness/seed: harness-cust-0001, harness-cust-0002.
+# Use $(new_id) for anything a check creates, so re-runs never collide.
+
+# Happy path: the response, DB state on both sides, the event, and its consumer.
+email="create-$(new_id)@harness.test"
+check --name customer-create-happy --method POST --path /api/v1/customers \
+	--body "{\"name\":\"Harness Create\",\"email\":\"$email\"}" \
+	--status 201 --jq '.id | length > 0' --save customer_id=.id \
+	--events customer.v1.created \
+	--await "SELECT email FROM customers WHERE email = '$email'" "$email" \
+	--await "SELECT status FROM customer_reads WHERE email = '$email'" active \
+	--logs "\"msg\":\"welcome email sent\".*\"to\":\"$email\""
+customer_id="$(var customer_id)"
+
+# A GET is re-sent on every poll until its probes hold (eventual consistency).
+check --name customer-get-from-read-model --path "/api/v1/customers/$customer_id" \
+	--status 200 --jq ".id == \"$customer_id\" and .status == \"active\""
+
+# Negative path: validation stops the request before anything is published.
+check --name customer-create-invalid-email --method POST --path /api/v1/customers \
+	--body '{"name":"x","email":"not-an-email"}' --status 400 --no-events
+
+# Async: produce an event onto this sandbox's topics as another producer would,
+# then assert the side effect.
+id="$(new_id)"
+check --name worker-customer-created-projects \
+	--produce customer.v1.created --key "$id" \
+	--body "{\"id\":\"$id\",\"name\":\"Produced\",\"email\":\"p-$id@harness.test\"}" \
+	--await "SELECT email FROM customer_reads WHERE id = '$id'" "p-$id@harness.test"
+
+# Failure path on purpose: a poison message is retried, then dead-lettered.
+# The errors it logs are excused for this check only.
+poison="$(new_id)"
+check --name worker-poison-message-dead-lettered \
+	--produce customer.v1.created --key "$poison" \
+	--body "{\"id\":42,\"name\":\"Poison\",\"email\":\"poison-$poison@harness.test\"}" \
+	--dead-letter --timeout 20 \
+	--expect-errors "\"msg\":\"event handler (failed|exhausted retries, sent to dead-letter topic)\""
+
+# A broken downstream (once a context calls one; there are none yet):
+#   mock_scenario payments error
+#   check --name order-payments-down --method POST --path /api/v1/orders \
+#   	--body '{"customer_id":"harness-cust-0001"}' --status 502 --no-events
+#   mock_clear_scenarios

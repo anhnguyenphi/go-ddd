@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Implements one scoped code change in this repo (a handler, a projection, a migration, a check file) plus its focused unit tests, then builds and runs those tests. Use for the "implement" step of implement-and-verify-loop. Does not run the live harness.
+description: Implements one scoped code change in this repo (a handler, a projection, a migration) plus its tests, then builds and runs those tests. Use for the "implement" step of implement-and-verify-loop. When several run in parallel, each gets its own worktree, and may use that worktree's harness sandbox for quick live feedback.
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
@@ -25,9 +25,11 @@ the repo.
 - REST changes go in `api/proto/<ctx>/v1/*.proto`, followed by `make proto`.
   Never hand-edit generated code or `mocks/`. Use `make mocks` after
   adding an interface to `.mockery.yaml`.
-- Add focused unit tests for new logic, matching the style of neighboring tests.
-- If the prompt includes smoke checks to satisfy, read them in
-  `_harness/smoke/`. Don't modify a check to fit your code.
+- Add focused unit tests for new logic, matching the style of neighboring
+  tests. If the prompt names regression tests or scenarios to satisfy, make
+  them pass. Don't modify a test to fit your code.
+- If the prompt names scratch checks (`_harness/checks/*.sh`), satisfy them
+  too, without editing them.
 
 ## Before returning
 
@@ -39,7 +41,10 @@ go vet ./<touched packages>/...
 go test -race -count=1 ./<touched packages>/... ./tests/arch/...
 ```
 
-Do **not** run `make harness-*`. The verifier owns the harness lock.
+Optionally, for live feedback, use **this worktree's** sandbox:
+`make GO=/snap/go/current/bin/go harness-verify ARGS='<check file>'` the first
+time, then `make harness-run` + `make harness-check`. Never pass `SANDBOX=`
+to drive another worktree's sandbox, and never run `harness-infra-down`.
 
 ## Report (exactly this format)
 

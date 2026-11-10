@@ -1,13 +1,13 @@
 //go:build e2e
 
 // Package e2e runs the shared black-box scenarios (internal/testsupport/
-// scenarios) against an already running deployment: the local harness,
-// docker-compose, or staging. It only speaks the public contract (REST + the
+// scenarios) against an already running deployment: a local harness sandbox
+// (make harness-e2e, or harness-verify ARGS=--e2e), docker-compose, or staging. It only speaks the public contract (REST + the
 // api/proto gRPC clients), creates uniquely named data and never deletes
 // anything, so it is safe to re-run against shared environments. tests/arch
 // enforces that it imports nothing from the application itself.
 //
-//	E2E_BASE_URL=http://localhost:58080 E2E_GRPC_ADDR=localhost:59090 \
+//	E2E_BASE_URL=http://localhost:8080 E2E_GRPC_ADDR=localhost:9090 \
 //	  go test -tags=e2e ./tests/e2e/...
 //
 // E2E_BASE_URL is required (the suite skips without it). E2E_GRPC_ADDR is

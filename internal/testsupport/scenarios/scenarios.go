@@ -43,6 +43,7 @@ type Scenario struct {
 func All() []Scenario {
 	return []Scenario{
 		{"Health", Health},
+		{"OpenAPI", OpenAPI},
 		{"CustomerLifecycle", CustomerLifecycle},
 		{"CustomerValidation", CustomerValidation},
 		{"CustomerNotFound", CustomerNotFound},

@@ -1,0 +1,3 @@
+# Scratch checks are per-worktree and never committed: they're an agent's
+# quick feedback loop, not regression (that is tests/).
+*.sh

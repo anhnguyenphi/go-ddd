@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# migrate: apply or roll back migrations on the harness database with the
+# migrate: apply or roll back migrations on this sandbox's database ($HARNESS_PG_DB) with the
 # production migration tool (cmd/migrate).
 #
 # Usage: _harness/scripts/migrate.sh [up [N] | down [N] | status]
@@ -11,7 +11,8 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 acquire_lock
 
-deps_running || die "dependencies are not up; run make harness-up first"
+require_sandbox
+deps_running || die "shared infra is not up; run make harness-up first"
 
 direction="${1:-up}"
 steps="${2:-}"

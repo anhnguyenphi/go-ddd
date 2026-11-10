@@ -1,14 +1,19 @@
 # Downstream stubs
 
-[WireMock](https://wiremock.org/docs/stubbing/) loads every `*.json` file in
-this directory as stub mappings. The directory is mounted read-only into the
-`wiremock` container. `make harness-up` (and `make harness-mocks ARGS=reset`)
-reloads the files without a restart, and checks that the number of stubs
-loaded matches the files.
+Every `*.json` file in this directory is a set of
+[WireMock](https://wiremock.org/docs/stubbing/) stub mappings. WireMock is
+shared by every harness sandbox. `make harness-up` (and
+`make harness-mocks ARGS=reset`) pushes a copy of these stubs for **your**
+sandbox through the admin API, with every URL matcher prefixed by
+`/sb_<sandbox>` and tagged `metadata.harnessSandbox`, then checks that the
+number of stubs loaded matches the files. Other sandboxes' copies are never
+touched.
 
 Use one file per downstream service, named after its prefix: `payments.json`
 holds the stubs for everything the app sends to
-`${HARNESS_MOCK_URL}/payments/...`.
+`${HARNESS_MOCK_URL}/${HARNESS_MOCK_PREFIX}/payments/...`. Write the paths
+**without** the sandbox prefix (`/payments/v1/...`). Don't set `id`/`uuid`:
+they're stripped so sandboxes don't overwrite each other.
 
 **There are no stubs today.** No bounded context makes an outbound HTTP call
 yet, so any request WireMock receives is unmatched and fails the run.
@@ -46,10 +51,10 @@ A file holds one mapping, or `{"mappings": [...]}`:
 - Copy response shapes from the provider's spec or the client's own types,
   and don't invent them. The `add-downstream-stub` skill covers the full
   procedure.
-- Never call `/__admin/mappings/save`. The mount is read-only, and runtime
-  stubs must not leak into these files.
+- Never call `/__admin/mappings/save`. Runtime stubs (and other sandboxes'
+  copies) must not leak into these files.
 
 Failure scenarios (`error`, `timeout`, `malformed`, `empty`) are not stub
-files. They're priority-1 runtime stubs:
+files. They're priority-1 runtime stubs that match only your sandbox's prefix:
 `make harness-mocks ARGS="scenario <svc> error"`, or `mock_scenario <svc> <kind>`
 inside a check file. `make harness-mocks ARGS=reset` drops them.

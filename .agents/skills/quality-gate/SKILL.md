@@ -28,21 +28,27 @@ Generated files are never hand-edited.
 GO=/snap/go/current/bin/go scripts/check.sh
 ```
 
-This runs gofmt (it rewrites files, so review the diff), vet, build,
-`go test -race ./...` (which includes the `tests/arch` layering rules),
+This runs gofmt (it rewrites files, so review the diff), vet (including the
+tagged suites), build, `go test -race ./...` (which includes the `tests/arch`
+layering rules), the contract suite, the in-memory integration profile,
 golangci-lint, and govulncheck. The last two are skipped if they aren't
 installed. Say so in your report if they were skipped.
 
-## 3. Tagged suites
+## 3. Infra integration
 
 ```bash
-go test -race -count=1 -tags=integration ./tests/integration/...
-go test -count=1 -tags=contract ./tests/contract/...
+make GO=/snap/go/current/bin/go test-integration
 ```
 
-Run the contract suite whenever an integration event or its mapper changed.
-A failure there means you broke a published contract. Don't "fix" the
-contract test. Make the change additive or add a `v2` event.
+Run this when you touched an adapter (SQL, Kafka), a migration, wiring in
+`internal/bootstrap`, or the event bus. It starts Postgres and Redpanda via
+testcontainers and runs the shared scenarios on every profile. If it reports
+the infra tests as skipped, Docker wasn't reachable: say so, don't call it a
+pass.
+
+A contract failure (in `check.sh`) means you broke a published contract.
+Don't "fix" the golden file. Make the change additive (then
+`make test-contract ARGS=-update`) or add a `v2` event.
 
 ## 4. Turn failures into a fix list
 

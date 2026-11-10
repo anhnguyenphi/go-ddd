@@ -1,0 +1,12 @@
+{
+  "name": "customer.v1.email_changed",
+  "source": "customer",
+  "version": 1,
+  "aggregate_id": "c-1",
+  "occurred_at": "2026-01-02T03:04:05Z",
+  "payload": {
+    "id": "c-1",
+    "old_email": "a@example.com",
+    "new_email": "b@example.com"
+  }
+}

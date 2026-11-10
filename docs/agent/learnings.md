@@ -22,6 +22,12 @@ changelog (that's git), or anything obvious from the code.
 - `configs/config.json` is the dev profile (Postgres + Kafka), and it's picked up from the repo root automatically. An empty env var does not clear it, because empty values are ignored. Point `CONFIG_PATH` at another file instead. (`internal/platform/config/config.go`, 2026-10-28)
 - `KAFKA_MAX_RETRIES=0` means "default" (3), not "no retries". The harness uses 1 hop with a 100ms delay. (`internal/eventbus/kafka/bus.go` `setDefaults`, 2026-10-28)
 
+## Testing
+
+- testcontainers-go ignores Docker CLI contexts, so with colima it fails with `failed to create Docker provider` even though `docker` works. The make targets prefix `scripts/testcontainers-env.sh` (DOCKER_HOST + Ryuk socket override). By hand: `env $(scripts/testcontainers-env.sh) go test ...`. (`make test-integration`, 2026-11-10)
+- The memory adapters must behave like Postgres, or the fast profile lies. The conformance suites caught two drifts: the memory repo accepted a stale same-version write, and a redelivered `customer.v1.created` revived a deactivated row in the memory read model. A new adapter goes into `repotest` / `projectiontest`. (`internal/customer/infrastructure/*/…test`, 2026-11-10)
+- A fresh Kafka consumer group takes about 6-20s to join on Redpanda, so the first read in the `postgres+kafka` profile is slow. Scenarios poll with `ReadTimeout`; never sleep. Kafka-bus tests use unique topic prefixes (`newIsolatedBus`) so poison messages don't leak across tests. (`tests/integration`, 2026-11-10)
+
 ## Behavior
 
 - The outbox is in-memory even in the Postgres profile. Events written by a process that dies before its relay runs are lost. Don't assume an `outbox_messages` row exists. (`internal/bootstrap/application.go`, 2026-10-28)

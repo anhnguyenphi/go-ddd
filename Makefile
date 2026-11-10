@@ -12,7 +12,7 @@ LDFLAGS    := -s -w
 
 .PHONY: help
 help: ## Show this help
-	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: tools
@@ -61,20 +61,41 @@ vet: ## go vet
 	$(GO) vet $(PKG)
 
 .PHONY: test
-test: ## Run unit tests
+test: ## Unit + arch tests (no infra)
 	$(GO) test -race -count=1 $(PKG)
 
+# testcontainers-go ignores Docker CLI contexts (colima, ...); this prefix
+# derives DOCKER_HOST from the active one. Empty when nothing is needed.
+TC_ENV = $(shell scripts/testcontainers-env.sh)
+
 .PHONY: test-integration
-test-integration: ## Run integration tests (requires infra; see tests/integration)
-	$(GO) test -race -count=1 -tags=integration ./tests/integration/...
+test-integration: ## Integration: in-process app on memory + real Postgres/Redpanda via testcontainers (skips infra without Docker; REQUIRE_INFRA=1 to fail instead)
+	$(TC_ENV) $(GO) test -race -count=1 -tags=integration ./tests/integration/...
+
+.PHONY: test-integration-short
+test-integration-short: ## Integration, in-memory profile only (no Docker)
+	$(GO) test -race -count=1 -short -tags=integration ./tests/integration/...
+
+.PHONY: test-contract
+test-contract: ## Contract: integration-event payloads vs golden files (ARGS=-update to rewrite, additive changes only)
+	$(GO) test -count=1 -tags=contract ./tests/contract/... $(ARGS)
 
 .PHONY: test-e2e
-test-e2e: ## Run end-to-end tests
+test-e2e: ## E2E scenarios against a running deployment (needs E2E_BASE_URL; E2E_GRPC_ADDR optional)
 	$(GO) test -count=1 -tags=e2e ./tests/e2e/...
 
+.PHONY: test-e2e-harness
+test-e2e-harness: ## E2E scenarios against the running harness (run harness-verify first)
+	E2E_BASE_URL=http://localhost:58080 E2E_GRPC_ADDR=localhost:59090 \
+		$(GO) test -count=1 -tags=e2e ./tests/e2e/...
+
+.PHONY: test-all
+test-all: test test-contract test-integration ## Unit, arch, contract and integration (everything but the harness)
+
 .PHONY: cover
-cover: ## Unit tests with coverage report
-	$(GO) test -covermode=atomic -coverprofile=coverage.txt $(PKG)
+cover: ## Coverage of internal/... across unit + integration tests (report only)
+	$(TC_ENV) $(GO) test -count=1 -tags=integration -covermode=atomic -coverpkg=./internal/... \
+		-coverprofile=coverage.txt ./internal/... ./tests/integration/...
 	$(GO) tool cover -func=coverage.txt | tail -1
 
 .PHONY: lint

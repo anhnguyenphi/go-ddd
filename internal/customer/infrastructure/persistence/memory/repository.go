@@ -46,7 +46,10 @@ func (r *Repository) Save(_ context.Context, customer *domain.Customer) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if existing, ok := r.byID[snap.ID]; ok && existing.Version > snap.Version {
+	// Same rule as the Postgres adapter (UPDATE ... WHERE version < new
+	// version): a write must carry a newer version than what is stored, so a
+	// writer that loaded a stale copy loses. Pinned by repotest.
+	if existing, ok := r.byID[snap.ID]; ok && existing.Version >= snap.Version {
 		return shareddomain.ErrConflict
 	}
 	// keep the email index consistent

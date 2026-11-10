@@ -1,0 +1,90 @@
+# CI: one job per test layer, run in parallel. See docs/agent/testing.md.
+#
+#   lint         golangci-lint (pinned in scripts/install-tools.sh), all build tags
+#   unit         unit + arch + contract + in-memory integration
+#   integration  integration against real Postgres + Redpanda (testcontainers)
+#   e2e          the live harness (real binaries) + the black-box e2e suite
+#   vuln         govulncheck
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: scripts/install-tools.sh lint
+      - run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: make lint
+      - name: gofmt
+        run: test -z "$(gofmt -l $(git ls-files '*.go'))" || { gofmt -l $(git ls-files '*.go'); exit 1; }
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./... && go vet -tags=integration,contract,e2e ./tests/...
+      - run: make test
+      - run: make test-contract
+      - run: make test-integration-short
+
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_INFRA: "1" # fail, don't skip, if Docker is missing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test-integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: harness verify (smoke checks against real binaries)
+        run: make GO="$(which go)" harness-verify
+      - name: e2e scenarios against the harness
+        run: make test-e2e-harness
+      - name: harness report
+        if: always()
+        run: cat tmp/harness/report.md 2>/dev/null >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: harness
+          path: tmp/harness/
+          if-no-files-found: ignore
+      - if: always()
+        run: make harness-down
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: scripts/install-tools.sh vuln
+      - run: $(go env GOPATH)/bin/govulncheck ./...

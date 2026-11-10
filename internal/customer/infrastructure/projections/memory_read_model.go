@@ -64,6 +64,13 @@ func (m *MemoryReadModel) onCreated(_ context.Context, e eventbus.Event) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// Redelivery (at-least-once) must not reset status or created_at; like
+	// the Postgres upsert, only name and email are refreshed.
+	if row, ok := m.rows[p.ID]; ok {
+		row.Name, row.Email = p.Name, p.Email
+		m.rows[p.ID] = row
+		return nil
+	}
 	m.rows[p.ID] = dto.Customer{
 		ID:        p.ID,
 		Name:      p.Name,

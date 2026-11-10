@@ -173,9 +173,10 @@ Both land on the same merged OpenAPI doc at `/openapi.json` / `/docs`
 (`api/openapi/myappv1.swagger.json` — see buf.gen.yaml's `allow_merge`).
 
 Try it in code: `internal/order/application/commands/place_order_test.go` is
-a fast unit test with a fake verifier; `tests/integration/order_sync_test.go`
-wires the real `customer` context and calls `PlaceOrder` over both gRPC and
-REST — including the case where the customer doesn't exist yet.
+a fast unit test with a fake verifier; the `OrderREST` / `OrderGRPC`
+scenarios in `internal/testsupport/scenarios` wire the real `customer` context
+and call `PlaceOrder` over both gRPC and REST — including the case where the
+customer doesn't exist yet — on every profile (see `docs/agent/testing.md`).
 
 ## Quick start
 

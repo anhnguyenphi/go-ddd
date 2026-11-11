@@ -12,13 +12,11 @@ reaction).
 
 ## Steps
 
-1. **Tests first.** In `tests/integration`, publish the event the way its
-   producer would and assert the side effect (see
-   `TestKafka_ExternallyProducedEventOnPrefixedTopics` in
-   `side_effects_test.go`; `testsupport.WithLogCapture` for log-only effects).
-   If the event comes from an HTTP command in this repo, also assert the
-   effect end to end on every profile (`TestSideEffects`, or a scenario when a
-   client can see it). To watch it live in your sandbox, add a scratch check
+1. **Tests first.** Unit-test the handler: feed it the event payload the way
+   its producer would and assert the side effect through the port's mock or
+   fake (see `internal/notification/application/handlers`). When a client can
+   see the effect, also add a scenario in `internal/testsupport/scenarios`
+   (run by e2e). To watch it live in your sandbox, add a scratch check
    in `_harness/checks/<task>.sh`:
    ```bash
    id="$(new_id)"
@@ -44,7 +42,7 @@ reaction).
    add it to `HARNESS_TOPICS` in `_harness/.env.harness`.
 6. **Failure path**: unit-test that the handler returns an error for an
    undecodable payload. Retry → DLQ delivery itself is pinned by
-   `tests/integration/kafka_test.go`. To see it live, a scratch check with an
+   `internal/eventbus/kafka/bus_integration_test.go`. To see it live, a scratch check with an
    undecodable payload, `--dead-letter`, and
    `--expect-errors '"msg":"event handler (failed|exhausted retries, sent to dead-letter topic)"'`
    (see `_harness/checks/example.sh.sample`).

@@ -176,7 +176,7 @@ Try it in code: `internal/order/application/commands/place_order_test.go` is
 a fast unit test with a fake verifier; the `OrderREST` / `OrderGRPC`
 scenarios in `internal/testsupport/scenarios` wire the real `customer` context
 and call `PlaceOrder` over both gRPC and REST — including the case where the
-customer doesn't exist yet — on every profile (see `docs/agent/testing.md`).
+customer doesn't exist yet — in e2e against the real binaries (see `docs/agent/testing.md`).
 
 ## Quick start
 

@@ -22,7 +22,7 @@ type pkg struct {
 func loadGraph(t *testing.T) []pkg { return loadGraphTags(t, "") }
 
 // loadGraphTags is loadGraph with build tags, for packages whose files are all
-// behind a tag (tests/e2e, tests/integration).
+// behind a tag (tests/e2e, tests/contract).
 func loadGraphTags(t *testing.T, tags string) []pkg {
 	t.Helper()
 	// Use the absolute module pattern so this works regardless of the test's

@@ -1,8 +1,8 @@
 # CI: one job per test layer, run in parallel. See docs/agent/testing.md.
 #
 #   lint         golangci-lint (pinned in scripts/install-tools.sh), all build tags
-#   unit         unit + arch + contract + in-memory integration
-#   integration  integration against real Postgres + Redpanda (testcontainers)
+#   unit         unit + arch + contract
+#   integration  adapter integration tests against real Postgres + Redpanda (testcontainers)
 #   e2e          the black-box e2e suite against real binaries, run in a harness
 #                sandbox (no scratch checks: regression lives in tests/)
 #   vuln         govulncheck
@@ -41,10 +41,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go vet ./... && go vet -tags=integration,contract,e2e ./tests/...
+      - run: go vet ./... && go vet -tags=integration,contract,e2e ./...
       - run: make test
       - run: make test-contract
-      - run: make test-integration-short
 
   integration:
     runs-on: ubuntu-latest

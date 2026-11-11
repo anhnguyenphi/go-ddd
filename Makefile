@@ -69,12 +69,8 @@ test: ## Unit + arch tests (no infra)
 TC_ENV = $(shell scripts/testcontainers-env.sh)
 
 .PHONY: test-integration
-test-integration: ## Integration: in-process app on memory + real Postgres/Redpanda via testcontainers (skips infra without Docker; REQUIRE_INFRA=1 to fail instead)
-	$(TC_ENV) $(GO) test -race -count=1 -tags=integration ./tests/integration/...
-
-.PHONY: test-integration-short
-test-integration-short: ## Integration, in-memory profile only (no Docker)
-	$(GO) test -race -count=1 -short -tags=integration ./tests/integration/...
+test-integration: ## Integration (*_integration_test.go next to each adapter): adapters against real Postgres/Redpanda via testcontainers (skips infra without Docker; REQUIRE_INFRA=1 to fail instead)
+	$(TC_ENV) $(GO) test -race -count=1 -tags=integration ./internal/...
 
 .PHONY: test-contract
 test-contract: ## Contract: integration-event payloads vs golden files (ARGS=-update to rewrite, additive changes only)
@@ -94,7 +90,7 @@ test-all: test test-contract test-integration ## Unit, arch, contract and integr
 .PHONY: cover
 cover: ## Coverage of internal/... across unit + integration tests (report only)
 	$(TC_ENV) $(GO) test -count=1 -tags=integration -covermode=atomic -coverpkg=./internal/... \
-		-coverprofile=coverage.txt ./internal/... ./tests/integration/...
+		-coverprofile=coverage.txt ./internal/...
 	$(GO) tool cover -func=coverage.txt | tail -1
 
 .PHONY: lint

@@ -31,7 +31,7 @@ Check, in this order:
    `NNNN_name.{up,down}.sql`. Nothing breaks the running app mid-deploy (for
    example, NOT NULL without a default on a populated table).
 6. **Evidence**: each behavior change is pinned by a regression test
-   (`internal/testsupport/scenarios`, `tests/integration`, `tests/contract`,
+   (`internal/testsupport/scenarios`, `*_integration_test.go` next to the code, `tests/contract`,
    or unit tests) that asserts on effects, and no test was weakened to pass.
    Harness scratch checks (`_harness/checks/`) are not evidence of coverage,
    and must never be committed.

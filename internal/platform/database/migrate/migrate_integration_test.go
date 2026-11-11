@@ -1,15 +1,19 @@
 //go:build integration
 
-package integration
+package migrate_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/example/myapp/internal/platform/database/migrate"
 	"github.com/example/myapp/internal/testsupport/containers"
 )
+
+// TestMain terminates the containers this package's tests started.
+func TestMain(m *testing.M) { os.Exit(containers.RunMain(m)) }
 
 // Every migration must roll back cleanly and re-apply: up (done by the
 // template) -> down all -> up all. Automates step 6 of the definition of done.

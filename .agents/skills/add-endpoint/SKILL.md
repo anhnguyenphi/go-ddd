@@ -14,9 +14,10 @@ Copy the customer context: `CreateCustomer` for a command, `GetCustomer` /
 1. **Tests first.** Add a scenario in `internal/testsupport/scenarios` (and
    list it in `All()`) for the new route: the happy path (status and body,
    then the read side via polling), a validation failure (`400`), and
-   not-found (`404`) where relevant. It runs on every profile in
-   `tests/integration` and in e2e. Run
-   `make test-integration-short` and see it fail. Optionally add scratch
+   not-found (`404`) where relevant. It runs in e2e against your sandbox:
+   run `make GO=/snap/go/current/bin/go harness-verify ARGS=--e2e` (or
+   `harness-e2e ARGS='-run TestScenarios/<Name>'` once the sandbox is up) and
+   see it fail. Optionally add scratch
    checks in `_harness/checks/<task>.sh` to watch rows (`--await`) and events
    (`--events`, `--no-events`) live.
 2. **Proto**: add the RPC and messages to `api/proto/<ctx>/v1/<ctx>.proto`

@@ -30,7 +30,7 @@ GO=/snap/go/current/bin/go scripts/check.sh
 
 This runs gofmt (it rewrites files, so review the diff), vet (including the
 tagged suites), build, `go test -race ./...` (which includes the `tests/arch`
-layering rules), the contract suite, the in-memory integration profile,
+layering rules), the contract suite,
 golangci-lint, and govulncheck. The last two are skipped if they aren't
 installed. Say so in your report if they were skipped.
 
@@ -42,7 +42,8 @@ make GO=/snap/go/current/bin/go test-integration
 
 Run this when you touched an adapter (SQL, Kafka), a migration, wiring in
 `internal/bootstrap`, or the event bus. It starts Postgres and Redpanda via
-testcontainers and runs the shared scenarios on every profile. If it reports
+testcontainers and runs every `*_integration_test.go` (each adapter against
+real infra). If it reports
 the infra tests as skipped, Docker wasn't reachable: say so, don't call it a
 pass.
 

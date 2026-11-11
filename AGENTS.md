@@ -41,8 +41,7 @@ don't commit it. After changing dependencies, run `go mod tidy` (and
 | Build `api`, `worker`, `migrate`, `agentctl` into `./bin` | `make build` |
 | Unit tests (includes the arch tests) | `make test` (`go test -race -count=1 ./...`) |
 | Single test | `go test -run TestName ./internal/customer/domain/...` |
-| Integration tests, in-memory profile only (no Docker) | `make test-integration-short` |
-| Integration tests incl. real Postgres + Redpanda (testcontainers) | `make test-integration` (`REQUIRE_INFRA=1` fails instead of skipping without Docker) |
+| Integration tests: each adapter against real Postgres / Redpanda (testcontainers), `*_integration_test.go` next to it | `make test-integration` (`REQUIRE_INFRA=1` fails instead of skipping without Docker) |
 | Contract tests (event payloads vs golden files) | `make test-contract` (`ARGS=-update` for additive changes only) |
 | Unit + contract + integration | `make test-all` |
 | Full local gate (fmt, vet, build, tests, lint, vuln) | `GO=/snap/go/current/bin/go scripts/check.sh` |
@@ -108,10 +107,12 @@ inspection. The sandbox is named after the worktree directory
    hand-edited, and committed with the change.
 4. Behavior change: a regression test pins it (written before the code and
    seen failing): a scenario in `internal/testsupport/scenarios` for anything
-   a client sees (it runs on every profile and in e2e), a `tests/integration`
-   test for side effects, `tests/contract` for event payloads. **And** live
-   proof in your sandbox: `make harness-verify ARGS=--e2e` passes, with
-   scratch checks for the effects you needed to see (rows, events, calls, logs).
+   a client sees (it runs in e2e, against the real binaries), a unit test of
+   the handler for a side effect a client can't see, the adapter's own
+   `*_integration_test.go` for adapter behavior against real infra,
+   `tests/contract` for event payloads. **And** live proof in your sandbox:
+   `make harness-verify ARGS=--e2e` passes, with scratch checks for the
+   effects you needed to see (rows, events, calls, logs).
 5. New outbound call: a stub in `_harness/mocks/`, a
    `<SVC>_URL=http://localhost:59999/${HARNESS_MOCK_PREFIX}/<svc>` in
    `_harness/.env.harness`, and a row in `docs/agent/downstream-services.md`.
@@ -164,7 +165,7 @@ Full version: [docs/agent/architecture.md](docs/agent/architecture.md).
 - **Write path**: command handler → `UoW.Within` → aggregate → `Repo.Save` +
   `Events.Publish` → outbox → relay → bus → subscribers.
 - **Read path**: queries go through the `ReadModel` projection, which is
-  eventually consistent. In tests, call `app.DrainOutbox(ctx)` before reading.
+  eventually consistent. Scenarios poll it (`ReadTimeout`); never sleep.
 
 ## Conventions
 

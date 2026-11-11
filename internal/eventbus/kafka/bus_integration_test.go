@@ -1,12 +1,13 @@
 //go:build integration
 
-package integration
+package kafka_test
 
 import (
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -19,12 +20,15 @@ import (
 	"github.com/example/myapp/internal/testsupport/containers"
 )
 
-// newIsolatedBus builds a Kafka bus whose topics carry a unique prefix, so
-// poison messages and offsets never leak into other tests on the shared broker.
+// TestMain terminates the containers this package's tests started.
+func TestMain(m *testing.M) { os.Exit(containers.RunMain(m)) }
+
+// newIsolatedBus builds a Kafka bus whose topics carry a unique prefix
+// (kafka.PrefixedTopicFor, the same mapping KAFKA_TOPIC_PREFIX uses), so poison
+// messages and offsets never leak into other tests on the shared broker.
 func newIsolatedBus(t *testing.T) (*kafka.Bus, func(eventName string) string) {
 	t.Helper()
-	prefix := "t" + api.Unique()
-	topicFor := func(name string) string { return prefix + "." + kafka.DefaultTopicFor(name) }
+	topicFor := kafka.PrefixedTopicFor("t" + api.Unique())
 	bus := kafka.New(kafka.Config{
 		Brokers:    containers.KafkaBrokers(t),
 		GroupID:    containers.UniqueGroupID(t),
@@ -49,9 +53,15 @@ func runBus(t *testing.T, bus *kafka.Bus) {
 	})
 }
 
+// An event published by a separate producer (another deployment, or a
+// producer-only bus with no consumer group) on the same prefixed topics reaches
+// the subscriber with every field intact.
 func TestKafkaBus_DeliversEventIntact(t *testing.T) {
 	t.Parallel()
-	bus, _ := newIsolatedBus(t)
+	bus, topicFor := newIsolatedBus(t)
+	producer := kafka.New(kafka.Config{Brokers: containers.KafkaBrokers(t), TopicFor: topicFor},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	t.Cleanup(func() { _ = producer.Close() })
 	got := make(chan eventbus.Event, 1)
 	if err := bus.Subscribe("test.v1.happened", func(_ context.Context, e eventbus.Event) error {
 		got <- e
@@ -70,7 +80,7 @@ func TestKafkaBus_DeliversEventIntact(t *testing.T) {
 		Version:     1,
 		Payload:     []byte(`{"hello":"world"}`),
 	}
-	if err := bus.Publish(context.Background(), sent); err != nil {
+	if err := producer.Publish(context.Background(), sent); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 

@@ -34,8 +34,8 @@ parallel tasks never share ports, DBs, topics, or mocks.
   made, and the log lines.
 - **Regression tests**, written before the code (see
   `docs/agent/testing.md` → "Where does my test go?"): a scenario for anything
-  a client sees, `tests/integration` for side effects
-  (`testsupport.WithLogCapture` for log-only ones), `tests/contract` for event
+  a client sees (run by e2e), a handler unit test for side effects, the
+  adapter's `*_integration_test.go` for adapter changes, `tests/contract` for event
   payloads, and unit tests for domain and handler rules. Run them: they must
   FAIL now. For a bug, the failing test reproduces it.
 - **Scratch checks** (optional, but cheap): `check` lines in

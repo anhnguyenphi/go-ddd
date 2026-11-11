@@ -48,8 +48,8 @@ outbox. The relay forwards them to the bus. Subscribers (the read-model
 projection, notification) react.
 
 **Read**: queries go through the `ReadModel` port (projections), never
-through the aggregate. The read model is eventually consistent. Tests call
-`app.DrainOutbox(ctx)` before reading. Harness checks use `--await` or a
+through the aggregate. The read model is eventually consistent. Scenarios
+poll the read side (`ReadTimeout`). Harness checks use `--await` or a
 re-polled `GET`.
 
 Kafka topics are per context and version: `customer.v1.created` goes to

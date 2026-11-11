@@ -1,9 +1,6 @@
-// Package scenarios holds black-box behavior scenarios written once and run
-// against every target:
-//
-//   - tests/integration, in-process, once per profile (memory, postgres,
-//     postgres+kafka) via testsupport.NewApp;
-//   - tests/e2e, against any running deployment (harness, staging).
+// Package scenarios holds black-box behavior scenarios. tests/e2e runs them
+// against any running deployment: a harness sandbox (real api + worker,
+// Postgres, Kafka, WireMock), CI, or staging.
 //
 // Scenarios only use the public contract (REST paths, proto clients), create
 // their own uniquely named data, never delete anything, and wait for the

@@ -179,8 +179,8 @@ Rules that keep checks useful:
   why it's harmless.
 - **When the behavior must stay fixed, turn the check into a Go test.** A
   scenario in `internal/testsupport/scenarios` for anything a client sees; a
-  `tests/integration` test (using `testsupport.WithLogCapture` for log-only
-  effects) for side effects; `tests/contract` for event payloads. The check
+  handler unit test for side effects; the adapter's `*_integration_test.go`
+  for adapter behavior; `tests/contract` for event payloads. The check
   itself is never committed.
 
 ## When it fails

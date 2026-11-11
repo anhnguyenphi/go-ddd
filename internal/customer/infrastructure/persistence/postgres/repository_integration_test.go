@@ -1,32 +1,28 @@
 //go:build integration
 
-package integration
+package postgres_test
 
 import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/example/myapp/internal/customer/domain"
 	custpostgres "github.com/example/myapp/internal/customer/infrastructure/persistence/postgres"
 	"github.com/example/myapp/internal/customer/infrastructure/persistence/repotest"
-	"github.com/example/myapp/internal/customer/infrastructure/projections"
-	"github.com/example/myapp/internal/customer/infrastructure/projections/projectiontest"
 	"github.com/example/myapp/internal/shared/infrastructure/transaction"
 	"github.com/example/myapp/internal/testsupport/containers"
 )
 
+// TestMain terminates the containers this package's tests started.
+func TestMain(m *testing.M) { os.Exit(containers.RunMain(m)) }
+
 func TestPostgresRepository_Conformance(t *testing.T) {
 	repotest.Run(t, func(t *testing.T) domain.Repository {
 		return custpostgres.New(containers.PostgresDB(t))
-	})
-}
-
-func TestPostgresReadModel_Conformance(t *testing.T) {
-	projectiontest.Run(t, func(t *testing.T) projections.ReadModel {
-		return projections.NewPostgresReadModel(containers.PostgresDB(t))
 	})
 }
 
@@ -43,7 +39,8 @@ func newCustomer(t *testing.T, id, email string) *domain.Customer {
 	return c
 }
 
-// The SQL unit of work must make repository writes inside it all-or-nothing.
+// The repository enlists in the SQL unit of work (transaction.FromContext), so
+// its writes inside one are all-or-nothing.
 func TestSQLUnitOfWork_RollsBackOnError(t *testing.T) {
 	db := containers.PostgresDB(t)
 	repo := custpostgres.New(db)

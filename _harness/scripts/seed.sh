@@ -6,9 +6,9 @@
 # Usage: _harness/scripts/seed.sh
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
+require_sandbox
 acquire_lock
 
-require_sandbox
 deps_running || die "shared infra is not up; run make harness-up first"
 
 for f in "$HARNESS_DIR"/seed/*.sql; do

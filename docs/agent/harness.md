@@ -13,7 +13,7 @@ It's the **agent's dev loop**, not the regression suite:
 | Purpose | Quickly see your change working live: the response, rows, events, outbound calls, log lines | Pin behavior so it never breaks again |
 | Written as | Scratch `check` lines in `_harness/checks/*.sh` (gitignored) | Go tests (see [testing.md](testing.md)) |
 | Committed | Never | Always, with the change |
-| Run by CI | No (CI runs `tests/e2e` *in* a sandbox, with no checks) | Yes |
+| Run by CI | No. CI runs `tests/e2e` *in* a sandbox, plus one committed check file, the DSL tour (`example.sh.sample`), as the harness's own self-test | Yes |
 
 So a behavior change ends with a Go test that pins it, **and** live proof in
 your sandbox: `make harness-verify ARGS=--e2e` (the regression scenarios
@@ -40,7 +40,9 @@ registry, shared by every worktree: $(git rev-parse --git-common-dir)/myapp-harn
 ```
 
 - **Sandbox name**: the worktree's directory name, slugged (`feature-a` →
-  `feature_a`). Override it with `SANDBOX=<name>` (CI uses `ci`).
+  `feature_a`). A name longer than 24 characters keeps its first 19 and gets
+  a 4-hex-digit hash of the whole name, so `…-v1` and `…-v2` stay distinct.
+  Override it with `SANDBOX=<name>` (CI uses `ci`).
 - **Slot**: the lowest free slot N gives api `58100+10N` and gRPC `58101+10N`.
   It's kept until `harness-down ARGS=--purge`.
 - **Slice of the shared infra**: lib.sh derives everything from the name:
@@ -68,10 +70,10 @@ leaves everything running afterwards.
 | up | `up.sh` | Shared infra healthy (`infra.sh up`, under `infra.lock`), slot allocated, sandbox DB and topics (+ `.retry.1`, `.dlq`) exist, this sandbox's stubs replaced with exactly `_harness/mocks` (count checked) |
 | migrate | `migrate.sh` | The production `cmd/migrate` on the sandbox DB. `down N` proves rollbacks |
 | seed | `seed.sh` | `_harness/seed/*.sql`, idempotent, with fixed `harness-` ids |
-| run | `run.sh` | api and worker rebuilt from this worktree and restarted detached (`setsid`), `/readyz` green, `worker started` logged, consumer group Stable |
-| e2e | `e2e.sh` | With `--e2e`: `tests/e2e` (every scenario) against this sandbox |
-| check | `check.sh` | Every `_harness/checks/*.sh` in this worktree, or the files/regex you pass |
-| report | `report.sh` | `tmp/harness/<name>/report.md`. **PASS** only when something behavioral ran (a check or e2e), all of it passed, no request reached WireMock unstubbed, and no unexpected ERROR log line exists |
+| run | `run.sh` | api and worker rebuilt from this worktree and restarted detached (`setsid`), `/readyz` green, `worker started` logged, consumer group Stable. When the build gives the same binaries with the same env, the restart (about 20s) is skipped and a new run starts in the existing logs (`HARNESS_FORCE_RESTART=1` restarts anyway) |
+| e2e | `e2e.sh` | With `--e2e`: `tests/e2e` (every scenario) against this sandbox. Exit 0 with no test run (`[no tests to run]`) is a FAIL |
+| check | `check.sh` | Every `_harness/checks/*.sh` in this worktree, or the files/regex you pass. A file with a bash syntax error, a file that ran no check, or a regex that matched nothing is a FAIL line, not a quiet pass |
+| report | `report.sh` | `tmp/harness/<name>/report.md`. **PASS** only when something behavioral ran (a check or e2e), all of it passed, e2e ran if `--e2e` asked for it, no request reached WireMock unstubbed (during checks, between them, or during e2e), and no unexpected ERROR log line exists. `Built from:` names the build the apps run; a **STALE** line means Go sources changed since then, so the result is about the old build |
 
 Exit codes: `0` PASS, `1` FAIL (the code or a check is wrong), `2` HARNESS
 ERROR (a setup step failed, so nothing was verified; fix the environment, not
@@ -102,7 +104,7 @@ make harness-migrate ARGS='down 1' && make harness-migrate ARGS=up
 make harness-down                                # stop this sandbox's apps
 make harness-down ARGS=--purge                   # also drop its DB, topics, stubs, slot, tmp dir
 make harness-sandboxes                           # every sandbox on this machine
-make harness-sandboxes ARGS=gc                   # purge sandboxes whose worktree is gone
+make harness-sandboxes ARGS=gc                   # purge sandboxes whose worktree is gone, and leftover state dirs
 eval "$(_harness/scripts/sandboxes.sh env)"      # E2E_BASE_URL, DATABASE_URL, ... for ad-hoc tools
 make harness-infra-down                          # stop the shared infra (refuses while sandboxes exist)
 ```
@@ -112,6 +114,11 @@ filter by your prefix (`/sb_<name>/`). In check files, `mock_scenario <svc> <kin
 and `mock_clear_scenarios` (from `lib.sh`) break and restore a downstream for
 this sandbox only. Stubs are pushed through the admin API, not mounted, so an
 edited stub file needs `make harness-mocks ARGS=reset` (or `harness-up`).
+
+`infra.sh` leaves a running stack alone, so an edit to
+`_harness/docker-compose.yml` takes effect only after
+`make harness-infra-down ARGS=--force` (when no other sandbox is in use) and
+the next `make harness-up`.
 
 Ad-hoc SQL against your sandbox DB:
 `docker compose -p myapp-harness -f _harness/docker-compose.yml exec postgres psql -U myapp -d myapp_sb_<name>`.
@@ -160,8 +167,9 @@ check --name worker-customer-created-projects-and-notifies \
 	--await "SELECT email FROM customer_reads WHERE id = '$id'" "p-$id@harness.test"
 ```
 
-How a check runs: it resets this sandbox's mock journal, the event tap, and
-log offsets. It fires the one trigger. It polls the positive probes until all
+How a check runs: it saves any unmatched call still in the journal (made
+between checks, or by the e2e suite) for the report, then resets this
+sandbox's mock journal, the event tap, and log offsets. It fires the one trigger. It polls the positive probes until all
 of them hold or `--timeout` (15s) expires (a GET is re-sent on each poll). It
 asserts the negative probes after a 1.5s settle delay. It always fails on
 unmatched mock calls. With `--produce`, it also fails if the message landed on
@@ -189,6 +197,10 @@ Rules that keep checks useful:
    (the request, the response, the events, the mock requests, and the app log
    lines from that check), or `tmp/harness/<name>/e2e.txt`.
 2. `make harness-logs ARGS=errors` shows handler failures and panics.
+   A **STALE** line in the report means you edited Go code after the apps
+   were built: `make harness-run`, then check again. `FAIL file:<name>` and
+   `FAIL filter:<regex>` mean the check file or the regex is wrong (syntax
+   error, no `check` reached, no name matched), not the app.
 3. Two identical failures in a row mean you should stop editing and inspect:
    `make harness-events ARGS='--raw'`, `make harness-mocks ARGS=requests`, or SQL.
 4. HARNESS ERROR (exit 2) means the environment is broken. Try

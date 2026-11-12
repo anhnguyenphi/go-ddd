@@ -9,9 +9,9 @@
 #   status    print the applied versions
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
+require_sandbox
 acquire_lock
 
-require_sandbox
 deps_running || die "shared infra is not up; run make harness-up first"
 
 direction="${1:-up}"

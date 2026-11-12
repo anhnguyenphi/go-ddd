@@ -23,12 +23,11 @@ if [ -f "$results" ]; then
 fi
 
 # Unmatched calls caught by checks, plus any that arrived between checks.
-unmatched_file="$HARNESS_TMP/.unmatched-report"
-cat "$HARNESS_TMP/unmatched.jsonl" 2>/dev/null >"$unmatched_file" || true
-if mock_requests unmatched >"$unmatched_file.now" 2>/dev/null; then
-	jq -c '.[] | {check: "(between checks)", method, path, query, body}' "$unmatched_file.now" >>"$unmatched_file" 2>/dev/null || true
-fi
-unmatched_count="$(grep -c . "$unmatched_file" || true)"
+# (mock_stash_unmatched skips the ones a check already recorded.)
+unmatched_file="$HARNESS_TMP/unmatched.jsonl"
+mock_stash_unmatched "(after the last check, or e2e)"
+unmatched_count="$(grep -c . "$unmatched_file" 2>/dev/null || true)"
+unmatched_count="${unmatched_count:-0}"
 
 errors="$(error_lines)"
 error_count="$(printf '%s' "$errors" | grep -c . || true)"
@@ -41,10 +40,22 @@ if [ -f "$HARNESS_TMP/e2e.status" ]; then
 	IFS="$(printf '\t')" read -r e2e_code e2e_secs <"$HARNESS_TMP/e2e.status" || true
 fi
 
+# verify.sh --e2e sets HARNESS_E2E_REQUESTED: an e2e run that was asked for
+# but left no result (e2e.sh died before go test) must not pass on checks alone.
+e2e_missing=""
+[ -n "${HARNESS_E2E_REQUESTED:-}" ] && [ -z "$e2e_code" ] && e2e_missing=1
+
+# The running apps vs the working tree (see tree_stamp in lib.sh).
+built="" stale=""
+if [ -f "$HARNESS_TMP/build.stamp" ]; then
+	built="$(sed -n 2p "$HARNESS_TMP/build.stamp")"
+	[ "$(sed -n 1p "$HARNESS_TMP/build.stamp")" = "$(tree_stamp)" ] || stale=1
+fi
+
 if [ -n "$setup_error" ]; then
 	result="HARNESS ERROR"
 	code=2
-elif [ "$failed" = 0 ] && { [ "$passed" -gt 0 ] || [ -n "$e2e_code" ]; } &&
+elif [ "$failed" = 0 ] && [ -z "$e2e_missing" ] && { [ "$passed" -gt 0 ] || [ -n "$e2e_code" ]; } &&
 	{ [ -z "$e2e_code" ] || [ "$e2e_code" = 0 ]; } &&
 	[ "$unmatched_count" = 0 ] && [ "$error_count" = 0 ]; then
 	result="PASS"
@@ -61,12 +72,19 @@ fi
 	echo "Result: $result   Git: $(git_summary)"
 	echo "Sandbox: $SANDBOX (slot ${HARNESS_SLOT:-?}, api ${HARNESS_API_URL:-?}, db $HARNESS_PG_DB, topics $KAFKA_TOPIC_PREFIX.*)"
 	echo "Schema: $schema   Run: $(date -u +%Y-%m-%dT%H:%M:%SZ)   $meta"
+	[ -n "$built" ] && echo "Built from: $built"
 	[ -n "$setup_error" ] && echo "Setup failed at: $setup_error (see the verify output above it)"
 	echo '```'
+	if [ -n "$stale" ] && [ -z "$setup_error" ]; then
+		echo
+		echo "**STALE: Go sources changed since the running api and worker were built.** This result is about the old build; run \`make harness-run\` (or \`harness-verify\`) to test the current code."
+	fi
 	echo
 	echo "## E2E (tests/e2e against this sandbox)"
 	echo
-	if [ -z "$e2e_code" ]; then
+	if [ -n "$e2e_missing" ]; then
+		echo "FAIL: requested (--e2e) but it never ran; see the e2e.sh error in the verify output."
+	elif [ -z "$e2e_code" ]; then
 		echo "Not run (harness-verify ARGS=--e2e, or make harness-e2e)."
 	else
 		[ "$e2e_code" = 0 ] && echo "PASS (${e2e_secs}s)" || echo "FAIL (exit $e2e_code, ${e2e_secs}s): see $HARNESS_TMP/e2e.txt"

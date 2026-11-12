@@ -10,12 +10,19 @@
 # developer's local database and both can run side by side.
 #
 # Driven by _harness/scripts/*.sh (infra.sh); don't `docker compose up` it by hand.
+# infra.sh leaves a running stack alone, so a change to this file takes effect
+# only after `make harness-infra-down ARGS=--force` (when no other sandbox is
+# in use) and the next `make harness-up`.
 
 name: myapp-harness
 
 services:
   postgres:
     image: postgres:16-alpine
+    # Every sandbox runs an api and a worker with their own pool on this one
+    # server (capped per process by DATABASE_MAX_OPEN_CONNS in .env.harness).
+    # The default of 100 connections is too tight for many sandboxes at once.
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_USER: myapp
       POSTGRES_PASSWORD: harness-fake-password
@@ -59,7 +66,10 @@ services:
   # 404 and is journaled as unmatched, which fails that sandbox's run.
   wiremock:
     image: wiremock/wiremock:3.9.1
-    command: ["--disable-banner"]
+    # The journal is shared and otherwise grows without bound: every sandbox
+    # reads its part of it on each poll. Each sandbox saves what it needs
+    # (mock_stash_unmatched) long before 20000 newer requests arrive.
+    command: ["--disable-banner", "--max-request-journal-entries", "20000"]
     ports:
       - "59999:8080"
     healthcheck:

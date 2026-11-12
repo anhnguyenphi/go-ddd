@@ -50,9 +50,10 @@ setup seed "$HARNESS_DIR/scripts/seed.sh"
 setup run "$HARNESS_DIR/scripts/run.sh"
 
 if $e2e; then
+	export HARNESS_E2E_REQUESTED=1
 	log "[e2e]"
 	"$HARNESS_DIR/scripts/e2e.sh" >/dev/null || true
-	log "e2e: $(tail -n 3 "$HARNESS_TMP/e2e.txt" | tr '\n' ' ')"
+	log "e2e: $(tail -n 3 "$HARNESS_TMP/e2e.txt" 2>/dev/null | tr '\n' ' ')"
 fi
 
 log "[check]"

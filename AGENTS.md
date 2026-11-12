@@ -5,7 +5,10 @@ hexagonal skeleton: bounded contexts, CQRS read models, a transactional outbox,
 and a pluggable event bus (in-process or Kafka).
 
 This file is the one set of instructions for every agent tool (Claude Code,
-Cursor, Codex) and for humans. `CLAUDE.md` only imports it. Before a task,
+Cursor, Codex) and for humans. `CLAUDE.md` only imports it. Skills and
+subagents live in `.agents/`; `.claude/skills` and `.claude/agents` are
+symlinks to them, because Claude Code only loads them from `.claude/`. Edit
+the files in `.agents/`. Before a task,
 read:
 
 - [docs/agent/learnings.md](docs/agent/learnings.md): gotchas earlier tasks
@@ -23,7 +26,8 @@ read:
 
 ## Toolchain gotcha
 
-The snap `go` shim prints nothing in this environment. Use the real binary:
+The snap `go` shim loses its output in this environment (it still runs and
+returns the exit code, so a failure is silent). Use the real binary:
 
 ```bash
 export PATH=/snap/go/current/bin:$PATH   # needed: tests/arch shells out to `go list`
@@ -67,7 +71,9 @@ don't commit it. After changing dependencies, run `go mod tidy` (and
 harness could not start, so nothing was verified). It writes
 `tmp/harness/<sandbox>/report.md` and leaves everything running for
 inspection. The sandbox is named after the worktree directory
-(`SANDBOX=<name>` overrides it).
+(`SANDBOX=<name>` overrides it). A **STALE** line in the report means Go
+sources changed after the running apps were built: run `harness-run` before
+trusting a `harness-check` or `harness-e2e` result.
 
 ## Rules
 

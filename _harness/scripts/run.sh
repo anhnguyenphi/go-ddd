@@ -4,18 +4,39 @@
 # worker's Kafka consumer group having settled, so the first async check
 # doesn't race it.
 #
+# When the build produced the very binaries that are already running, with the
+# same environment, the restart (about 20s) is skipped: the apps keep running
+# and a new run starts in their logs. HARNESS_FORCE_RESTART=1 restarts anyway.
+#
 # Usage: _harness/scripts/run.sh
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
+require_sandbox
 acquire_lock
 
-require_sandbox
 deps_running || die "shared infra is not up; run make harness-up first"
 
 log "building api, worker, agentctl"
 build_bin api ./cmd/api
 build_bin worker ./cmd/worker
 build_bin agentctl ./cmd/agentctl
+{
+	tree_stamp
+	echo "$(git_summary), $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} >"$HARNESS_TMP/build.stamp"
+
+fingerprint="$(run_fingerprint)"
+if [ -z "${HARNESS_FORCE_RESTART:-}" ] && app_alive api && app_alive worker &&
+	[ "$(cat "$HARNESS_TMP/run.fingerprint" 2>/dev/null || true)" = "$fingerprint" ] &&
+	curl -fsS -o /dev/null --max-time 5 "$HARNESS_API_URL/readyz" 2>/dev/null; then
+	# Same semantics as a restart, minus the wait: earlier log lines, and the
+	# lines earlier checks excused, belong to the previous run.
+	log_baseline_set
+	rm -f "$HARNESS_TMP/expected-lines.txt"
+	log "binaries and env unchanged; api and worker keep running (HARNESS_FORCE_RESTART=1 to restart)"
+	log "apps are up: api $HARNESS_API_URL (gRPC $HARNESS_GRPC_ADDR), worker"
+	exit 0
+fi
 
 # In parallel: each drains its Kafka readers on SIGTERM, which takes seconds.
 stop_app api &
@@ -23,7 +44,8 @@ stop_app worker &
 wait
 # Logs restart with the apps, so the lines checks excused restart too.
 # An e2e result from the previous build no longer says anything about this one.
-rm -f "$HARNESS_TMP/expected-lines.txt" "$HARNESS_TMP/e2e.status" "$HARNESS_TMP/e2e.txt"
+rm -f "$HARNESS_TMP/expected-lines.txt" "$HARNESS_TMP/e2e.status" "$HARNESS_TMP/e2e.txt" \
+	"$HARNESS_TMP/log.baseline" "$HARNESS_TMP/run.fingerprint"
 
 require_free_port "${HTTP_ADDR##*:}" "api http"
 require_free_port "${GRPC_ADDR##*:}" "api grpc"
@@ -44,4 +66,5 @@ until rpk group describe "$KAFKA_GROUP_ID" 2>/dev/null | grep -qE '^STATE +Stabl
 	[ "$SECONDS" -ge "$deadline" ] && die "consumer group $KAFKA_GROUP_ID not Stable after 60s"
 	sleep 0.5
 done
+echo "$fingerprint" >"$HARNESS_TMP/run.fingerprint"
 log "apps are up: api $HARNESS_API_URL (gRPC $HARNESS_GRPC_ADDR), worker"

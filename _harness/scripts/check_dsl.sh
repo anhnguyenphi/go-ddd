@@ -49,7 +49,6 @@ HARNESS_CHECK_TIMEOUT="${HARNESS_CHECK_TIMEOUT:-15}"
 HARNESS_SETTLE="${HARNESS_SETTLE:-1.5}"
 HARNESS_FILTER="${HARNESS_FILTER:-}"
 CHECK_RESULTS="$HARNESS_TMP/results.tsv"
-mkdir -p "$HARNESS_TMP/checks"
 
 # var <name> — a value saved by an earlier check's --save.
 var() {
@@ -82,7 +81,7 @@ _check_mark_logs() {
 
 _check_new_logs() { # [raw] — lines logged since the check started; "raw" drops the "<app>: " prefix
 	local pair app off
-	for pair in $CHECK_LOG_OFFSETS; do
+	for pair in ${CHECK_LOG_OFFSETS:-}; do
 		app="${pair%%:*}"
 		off="${pair#*:}"
 		if [ "${1:-}" = raw ]; then
@@ -153,6 +152,9 @@ check() {
 
 	# ---- reset: mock journal, event tap, log offsets
 	rm -f "$resp" "$evidence"
+	# Unstubbed calls made since the previous check (by the e2e suite, or by
+	# hand) are about to leave the journal: keep them for the report.
+	mock_stash_unmatched "(between checks, or e2e)"
 	if ! mock_clear_journal 2>/dev/null; then
 		_check_record "$name" FAIL 0 "WireMock is not reachable at $HARNESS_MOCK_URL"
 		return 0
@@ -279,8 +281,7 @@ check() {
 	unmatched="$(mock_requests unmatched 2>/dev/null || echo '[]')"
 	if [ "$(printf '%s' "$unmatched" | jq 'length')" != 0 ]; then
 		reasons="${reasons}unmatched downstream calls: $(printf '%s' "$unmatched" | jq -r '[.[] | .method + " " + .path] | join(", ")'); "
-		printf '%s' "$unmatched" | jq -c --arg check "$name" '.[] | {check: $check, method, path, query, body}' \
-			>>"$HARNESS_TMP/unmatched.jsonl"
+		mock_stash_unmatched "$name"
 	fi
 
 	# ---- expected errors: excuse exactly the matching lines logged during

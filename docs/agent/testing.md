@@ -19,7 +19,9 @@ outbox → bus → projection, cross-context reactions) is e2e's job.
 
 `scripts/check.sh` runs unit, arch and contract. CI (`.github/workflows/ci.yml`) also runs the infra integration suite
 with `REQUIRE_INFRA=1`, and the e2e suite against the real binaries in a
-harness sandbox (`SANDBOX=ci make harness-verify ARGS=--e2e`).
+harness sandbox (`SANDBOX=ci make harness-verify ARGS=--e2e`), together with
+the check-DSL tour (`_harness/checks/example.sh.sample`) as the harness's own
+self-test.
 
 **These layers are the regression suite.** The harness
 ([harness.md](harness.md)) is a different thing: a live sandbox per worktree

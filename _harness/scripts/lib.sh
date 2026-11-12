@@ -30,11 +30,18 @@ log()  { echo "==> [${SANDBOX:-?}] $*"; }
 warn() { echo "warning: $*" >&2; }
 die()  { echo "error: $*" >&2; exit 1; }
 
-# slug <text> — lowercase [a-z0-9_], at most 24 chars, never empty.
+# slug <text> — lowercase [a-z0-9_], at most 24 chars, never empty. A longer
+# name keeps its first 19 chars and gets a 4-hex-digit hash of the whole name,
+# so siblings that differ only at the end (…-v1, …-v2) stay distinct.
+# Idempotent: slugging a slug returns it unchanged.
 slug() {
-	local s
-	s="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g; s/__*/_/g; s/^_//; s/_$//' | cut -c1-24)"
-	s="${s%_}"
+	local s h
+	s="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g; s/__*/_/g; s/^_//; s/_$//')"
+	if [ "${#s}" -gt 24 ]; then
+		h="$(printf '%s' "$s" | cksum | cut -d' ' -f1)"
+		s="$(printf '%s' "$s" | cut -c1-19)"
+		s="${s%_}_$(printf '%04x' $((h % 65536)))"
+	fi
 	echo "${s:-default}"
 }
 
@@ -64,7 +71,14 @@ HARNESS_BIN="$HARNESS_TMP/bin"
 # Pid files live in the shared registry, not the worktree, so `sandboxes.sh gc`
 # can still stop the apps of a sandbox whose worktree was deleted.
 HARNESS_PIDS="$HARNESS_REGISTRY/pids/$SANDBOX"
-mkdir -p "$HARNESS_BIN" "$HARNESS_PIDS" "$HARNESS_TMP/responses" "$HARNESS_TMP/vars"
+
+# sandbox_dirs — create this sandbox's state directories. Called by whatever
+# first needs them (acquire_lock, sandbox_allocate, build_bin), never just by
+# sourcing this file: a read-only command, or one with a mistyped SANDBOX=,
+# must not leave an empty sandbox behind.
+sandbox_dirs() {
+	mkdir -p "$HARNESS_BIN" "$HARNESS_PIDS" "$HARNESS_TMP/responses" "$HARNESS_TMP/vars" "$HARNESS_TMP/checks"
+}
 
 # Per-sandbox slice of the shared infra. Defined before .env.harness is
 # sourced, so downstream URLs there can use ${HARNESS_MOCK_PREFIX}.
@@ -152,6 +166,7 @@ sandbox_names() {
 # infra lock so two sandboxes starting at once never pick the same slot.
 sandbox_allocate() {
 	sandbox_check_owner
+	sandbox_dirs
 	if sandbox_load; then
 		return 0
 	fi
@@ -186,6 +201,7 @@ sandbox_allocate() {
 
 acquire_lock() {
 	[ "${HARNESS_LOCK_HELD:-}" = "$SANDBOX" ] && return 0
+	sandbox_dirs
 	local lock="$HARNESS_TMP/.lock"
 	if ( set -o noclobber; echo "$$" >"$lock" ) 2>/dev/null; then
 		:
@@ -336,6 +352,7 @@ $(tail -n 20 "$HARNESS_TMP/$name.log" 2>/dev/null)"
 
 # build_bin <name> <package> — builds into tmp/harness/<sandbox>/bin from the working tree.
 build_bin() {
+	mkdir -p "$HARNESS_BIN"
 	"$GO" build -o "$HARNESS_BIN/$1" "$2" || die "build of $2 failed"
 }
 
@@ -420,15 +437,16 @@ mock_sandbox_mappings() {
 }
 
 # mock_requests [unmatched] — this sandbox's part of WireMock's request
-# journal, oldest first, as [{at, method, path, query, body, matched, route,
-# scenario}]. path has the sandbox prefix stripped, so it reads like the
+# journal, oldest first, as [{id, at, method, path, query, body, matched,
+# route, scenario}]. path has the sandbox prefix stripped, so it reads like the
 # downstream sees it (/payments/v1/...). route is the matching stub's "name";
 # scenario is set when a failure scenario answered.
 mock_requests() {
 	curl -fsS "$HARNESS_MOCK_URL/__admin/requests" | jq -c --arg only "${1:-}" --arg pfx "/$HARNESS_MOCK_PREFIX" '
 		[.requests[]
 		 | select(.request.url | startswith($pfx + "/"))
-		 | {at: .request.loggedDateString,
+		 | {id: .id,
+		    at: .request.loggedDateString,
 		    method: .request.method,
 		    path: (.request.url | split("?")[0] | ltrimstr($pfx)),
 		    query: (.request.url | split("?")[1] // null),
@@ -438,6 +456,23 @@ mock_requests() {
 		    scenario: (.stubMapping.metadata.harnessScenario // null)}
 		 | select($only == "" or (.matched | not))]
 		| reverse'
+}
+
+# mock_stash_unmatched <label> — append this sandbox's unmatched requests to
+# unmatched.jsonl, labelled, skipping the ones already there (by journal id).
+# Call it BEFORE mock_clear_journal: the journal is the only other record, so
+# an unstubbed call made between checks (by the e2e suite, or by hand) would
+# otherwise vanish when the next check resets its probes.
+mock_stash_unmatched() {
+	local out="$HARNESS_TMP/unmatched.jsonl" new
+	[ -d "$HARNESS_TMP" ] || return 0
+	touch "$out"
+	new="$(mock_requests unmatched 2>/dev/null | jq -c --arg check "$1" --slurpfile seen "$out" '
+		($seen | map(.id)) as $ids
+		| .[] | select(.id as $i | $ids | index($i) | not)
+		| {check: $check, id, method, path, query, body}' 2>/dev/null)" || return 0
+	[ -n "$new" ] && printf '%s\n' "$new" >>"$out"
+	return 0
 }
 
 # mock_clear_journal — forget this sandbox's requests (others keep theirs).
@@ -544,17 +579,68 @@ mock_stub_count_on_disk() {
 # logs, minus known noise (regexps in _harness/known-log-noise.txt) and the
 # exact lines checks caused on purpose (--expect-errors, recorded in
 # expected-lines.txt). Each line is prefixed with "<app>: ".
+# Only lines after the log baseline count (log_offset): run.sh sets it when it
+# keeps the apps running, which is what truncating the logs does on a restart.
 error_lines() {
 	local apps="${*:-api worker}" patterns="$HARNESS_TMP/.noise-patterns" app
 	local expected="$HARNESS_TMP/expected-lines.txt"
+	[ -d "$HARNESS_TMP" ] || return 0
 	grep -vE '^[[:space:]]*(#|$)' "$HARNESS_DIR/known-log-noise.txt" >"$patterns" 2>/dev/null || true
 	for app in $apps; do
 		[ -f "$HARNESS_TMP/$app.log" ] || continue
-		grep -E '"level":"ERROR"|^panic:|^fatal:|^fatal error:' "$HARNESS_TMP/$app.log" \
+		tail -c +"$(($(log_offset "$app") + 1))" "$HARNESS_TMP/$app.log" \
+			| grep -E '"level":"ERROR"|^panic:|^fatal:|^fatal error:' \
 			| { if [ -s "$patterns" ]; then grep -vE -f "$patterns"; else cat; fi; } \
 			| { if [ -s "$expected" ]; then grep -vxF -f "$expected"; else cat; fi; } \
 			| sed "s/^/$app: /" || true
 	done
+}
+
+# log_offset <app> — the byte offset in the app's log where the current run
+# begins (0 unless run.sh kept the apps running; see log_baseline_set).
+log_offset() {
+	local off
+	off="$(sed -n "s/^$1=//p" "$HARNESS_TMP/log.baseline" 2>/dev/null | head -n 1)"
+	echo "${off:-0}"
+}
+
+# log_baseline_set — start a new run in the existing logs, without a restart.
+log_baseline_set() {
+	local app size
+	for app in $HARNESS_APPS; do
+		size="$(wc -c <"$HARNESS_TMP/$app.log" 2>/dev/null | tr -d ' ')"
+		echo "$app=${size:-0}"
+	done >"$HARNESS_TMP/log.baseline"
+}
+
+# ---- build identity ---------------------------------------------------------
+
+# tree_stamp — identifies the Go sources of this worktree: HEAD plus every
+# uncommitted change to a .go file, go.mod or go.sum (untracked files too).
+# run.sh records it with the build; report.sh compares, to say when the
+# running apps are older than the code.
+tree_stamp() {
+	{
+		git rev-parse HEAD 2>/dev/null
+		git diff HEAD -- '*.go' go.mod go.sum 2>/dev/null
+		git ls-files --others --exclude-standard -- '*.go' 2>/dev/null | while IFS= read -r f; do
+			echo "$f"
+			cksum <"$f" 2>/dev/null
+		done
+	} | cksum | tr ' ' '-'
+}
+
+# run_fingerprint — what the running apps were started from: the two binaries
+# and everything that reaches them through the environment. Equal fingerprints
+# mean a restart would start the very same thing.
+run_fingerprint() {
+	{
+		cksum <"$HARNESS_BIN/api"
+		cksum <"$HARNESS_BIN/worker"
+		cksum <"$HARNESS_DIR/.env.harness"
+		cksum <"$HARNESS_DIR/config.harness.json"
+		echo "$HTTP_ADDR $GRPC_ADDR $DATABASE_URL $KAFKA_TOPIC_PREFIX $KAFKA_GROUP_ID"
+	} 2>/dev/null | cksum | tr ' ' '-'
 }
 
 # ---- misc -------------------------------------------------------------------

@@ -5,7 +5,8 @@
 # Usage: _harness/scripts/sandboxes.sh [list]   name, slot, ports, worktree, apps alive?
 #        _harness/scripts/sandboxes.sh env      shell exports for the current sandbox
 #                                               (E2E_BASE_URL, E2E_GRPC_ADDR, DATABASE_URL, ...)
-#        _harness/scripts/sandboxes.sh gc       purge sandboxes whose worktree no longer exists
+#        _harness/scripts/sandboxes.sh gc       purge sandboxes whose worktree no longer exists,
+#                                               and leftover state of unregistered ones
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -44,6 +45,20 @@ ENV
 			( HARNESS_PIDS="$HARNESS_REGISTRY/pids/$n"; for app in $HARNESS_APPS; do stop_app "$app"; done )
 			sandbox_purge_resources "$n"
 			rm -rf "$(sandbox_file "$n")" "$HARNESS_REGISTRY/pids/$n"
+		done
+		# Leftovers of sandboxes that have no registry entry: pid dirs in the
+		# shared registry, and state dirs in this worktree (other worktrees
+		# clean their own). A dir whose lock is held belongs to a sandbox
+		# that is starting right now, before it has its slot.
+		for d in "$HARNESS_REGISTRY"/pids/*/ tmp/harness/*/; do
+			[ -d "$d" ] || continue
+			n="$(basename "$d")"
+			[ -n "$n" ] && [ ! -f "$(sandbox_file "$n")" ] || continue
+			holder="$(cat "tmp/harness/$n/.lock" 2>/dev/null || true)"
+			[ -n "$holder" ] && kill -0 "$holder" 2>/dev/null && continue
+			log "removing leftover state of unregistered sandbox $n (${d%/})"
+			( HARNESS_PIDS="$HARNESS_REGISTRY/pids/$n"; for app in $HARNESS_APPS; do stop_app "$app"; done )
+			rm -rf "$HARNESS_REGISTRY/pids/$n" "tmp/harness/$n"
 		done
 		;;
 	*) die "unknown command '$1' (want: list | env | gc)" ;;

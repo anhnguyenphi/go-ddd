@@ -8,6 +8,11 @@
 #            built binaries): a clean slate for the next run.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
+
+if [ ! -f "$(sandbox_file)" ] && [ ! -d "$HARNESS_TMP" ] && [ ! -d "$HARNESS_PIDS" ]; then
+	log "no sandbox named '$SANDBOX' here; nothing to stop (make harness-sandboxes lists them)"
+	exit 0
+fi
 acquire_lock
 
 purge=false

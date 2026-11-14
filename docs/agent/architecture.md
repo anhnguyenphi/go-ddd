@@ -29,6 +29,9 @@ the composition root and the only place where adapters are chosen.
 | `notification` | Consumes `customer.v1.created` and "sends" a welcome email by logging `welcome email sent` |
 | `identity`, `payment` | Placeholders |
 
+What each context *means* (its language, invariants, events, and decisions)
+is in `internal/<ctx>/CONTEXT.md`, indexed by [context-map.md](context-map.md).
+
 Boundaries are enforced by [tests/arch/layering_test.go](../../tests/arch/layering_test.go):
 
 - `*/domain` must not import `/infrastructure`, `/interfaces`,

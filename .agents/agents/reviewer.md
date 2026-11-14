@@ -36,6 +36,13 @@ Check, in this order:
    Harness scratch checks (`_harness/checks/`) are not evidence of coverage,
    and must never be committed.
 
+7. **Domain memory**: read `internal/<ctx>/CONTEXT.md` of each touched
+   context. New names (types, RPCs, fields, events) use its Language. A new
+   term, invariant, event, cross-context call, or decision in the diff is
+   recorded there (and in `docs/agent/context-map.md` when it crosses a
+   boundary). The diff doesn't break a recorded invariant or decision without
+   updating it and saying why. An open question the change answers is removed.
+
 Report only real issues. Don't nitpick style that gofmt and the linter
 already enforce.
 

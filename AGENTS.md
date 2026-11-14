@@ -13,6 +13,9 @@ read:
 
 - [docs/agent/learnings.md](docs/agent/learnings.md): gotchas earlier tasks
   ran into. Always read it.
+- [docs/agent/context-map.md](docs/agent/context-map.md): the domain memory
+  index. Then read `internal/<ctx>/CONTEXT.md` of every bounded context you
+  touch: its language, invariants, events, and decisions.
 - [docs/agent/architecture.md](docs/agent/architecture.md): contexts, layers,
   write/read paths, and config profiles.
 - [docs/agent/harness.md](docs/agent/harness.md): the live sandbox harness
@@ -96,6 +99,9 @@ trusting a `harness-check` or `harness-e2e` result.
   worktree (`isolation: worktree`). Never drive another worktree's sandbox,
   and never stop the shared infra (`harness-infra-down`) while other
   sandboxes are registered.
+- **Speak the context's language.** Names in code, protos, events, and tests
+  use the terms in that context's `CONTEXT.md`. A new term, or a term whose
+  meaning changes, is recorded there in the same change.
 - **Harness checks are scratch, tests are regression.** `_harness/checks/*.sh`
   is gitignored and never run by CI. Anything that must stay fixed is a Go
   test in `tests/` or `internal/testsupport/scenarios`.
@@ -126,13 +132,19 @@ trusting a `harness-check` or `harness-e2e` result.
    (`harness-migrate ARGS="down 1"`, then `ARGS=up`).
    `TestMigrations_DownAllThenUpAgain` in `make test-integration` checks this
    for every migration automatically.
-7. Anything surprising is recorded in `docs/agent/learnings.md`
-   (skill `update-memory`).
+7. Domain change (a term, an aggregate or invariant, an integration event
+   published or consumed, a call into another context, a decision and its
+   reason): recorded in `internal/<ctx>/CONTEXT.md`, and in
+   `docs/agent/context-map.md` when it crosses a boundary.
+   `tests/arch/context_memory_test.go` checks the aggregates and events
+   against the code; the rest is on you and the reviewer.
+8. Anything surprising about tooling, config, tests, or the harness is
+   recorded in `docs/agent/learnings.md`. Both memories: skill `update-memory`.
 
 ## Work loop
 
 For any change in behavior, follow the `implement-and-verify-loop` skill:
-read memory, then write the failing tests (and scratch checks) first, then
+read memory (learnings and the domain memory), then write the failing tests (and scratch checks) first, then
 implement, then run the quality gate, then verify live in your sandbox, then
 review, then update memory. Allow at
 most **5** fix iterations, and act on new evidence each time. If the same
@@ -159,7 +171,12 @@ Full version: [docs/agent/architecture.md](docs/agent/architecture.md).
 
 - **Composition root**: [internal/bootstrap](internal/bootstrap) is the only
   place where concrete adapters get chosen. To add a context, add a
-  `module.go` in the context and wire it in `bootstrap/modules.go`.
+  `module.go` in the context and wire it in `bootstrap/modules.go`, and give
+  it a `CONTEXT.md` (template in `.agents/skills/update-memory/`) plus a row
+  in `docs/agent/context-map.md`.
+- **Domain memory**: `internal/<ctx>/CONTEXT.md` per context, indexed by
+  [docs/agent/context-map.md](docs/agent/context-map.md), kept honest by
+  [tests/arch/context_memory_test.go](tests/arch/context_memory_test.go).
 - **Context layout** (`internal/<ctx>/`): `domain/` → `application/`
   (`commands/`, `queries/`, `ports.go`, `dto/`) → `infrastructure/` →
   `interfaces/` (gRPC). `customer` is the full reference slice.

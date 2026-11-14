@@ -93,7 +93,7 @@ func TestApplicationLayerAvoidsConcreteInfra(t *testing.T) {
 }
 
 func TestBoundedContextsDoNotImportEachOther(t *testing.T) {
-	contexts := []string{"customer", "notification", "order", "payment", "identity"}
+	contexts := boundedContexts(t)
 	for _, p := range loadGraph(t) {
 		self := contextOf(p.ImportPath, contexts)
 		if self == "" {

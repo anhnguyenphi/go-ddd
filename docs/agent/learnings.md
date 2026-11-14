@@ -3,6 +3,10 @@
 Shared memory for agents and humans: durable gotchas that earlier tasks ran
 into. Read it before every task. Add to it with the `update-memory` skill.
 
+Domain knowledge (what a term means, an invariant, an event, why a decision
+was made) does not go here. It goes in `internal/<ctx>/CONTEXT.md`; the index
+is [context-map.md](context-map.md).
+
 Format: `- <fact>. <why it matters / what to do>. (<file or command>, YYYY-MM-DD)`
 
 Keep it short (around 150 lines). Move stable topics into `architecture.md`,
@@ -31,16 +35,18 @@ changelog (that's git), or anything obvious from the code.
 ## Behavior
 
 - The outbox is in-memory even in the Postgres profile. Events written by a process that dies before its relay runs are lost. Don't assume an `outbox_messages` row exists. (`internal/bootstrap/application.go`, 2026-10-28)
-- Order placement checks the customer through customer's read model, so a customer created a moment ago can read as unknown (404) until the projection catches up. (`internal/order/infrastructure/customerclient/verifier.go`, 2026-10-28)
-- `PlaceOrder` over REST returns 200, not 201. Unlike `CreateCustomer`, it doesn't set the `x-http-code` metadata. Pinned by the `OrderREST` scenario. (`internal/order/interfaces/grpc/server.go`, 2026-10-28)
-- An unknown customer in `PlaceOrder` returns 404, not 400 or 422, because `ErrNotFound` passes straight through. Pinned by the `OrderREST` scenario. (2026-10-28)
+- Order's rules that surprise (a just-created customer can read as unknown, an unknown customer is 404, REST returns 200 not 201) moved to `internal/order/CONTEXT.md`. A scenario or check that places an order right after creating the customer must poll for the customer first. (2026-11-14)
 - An undecodable `customer.v1.created` payload fails both subscribers (projection and notification). It hops through `.retry.1` and lands on `customer.v1.events.dlq` without blocking the partition. Bus behavior pinned by `TestKafkaBus_FailingHandlerRetriesThenDeadLetters`; see it live with the poison check in `_harness/checks/example.sh.sample`. (2026-10-28)
+
+## Domain memory
+
+- `tests/arch/context_memory_test.go` matches integration events by string literal: any literal shaped `<ctx>.v<N>.<name>` in a context's non-test code must be listed in its `CONTEXT.md` ("Events published" for its own prefix, "Events consumed" otherwise), and the reverse. A planned event goes under "Open questions", or the test calls it stale. An event name built by concatenation is invisible to the test, so keep names as whole literals. (2026-11-14)
 
 ## Harness
 
 - The harness is one sandbox per worktree on shared infra (2026-11-10 redesign). The registry of slots lives in the **git common dir** (`.git/myapp-harness/`, also pid files), so every worktree sees it, and it's never committed. Sandbox names come from the worktree's directory name, so two worktrees with the same basename collide: the second gets "belongs to worktree ..." and needs `SANDBOX=<name>`. (`_harness/scripts/lib.sh`, 2026-11-10)
 - WireMock is shared, so everything sandbox-scoped goes through metadata and path prefixes: stubs are imported with `deleteAllNotInImport: false`, tagged `harnessSandbox`, ids stripped, and removed with `remove-by-metadata`; the journal is cleared with `POST /__admin/requests/remove` (`urlPathPattern`), never `DELETE /__admin/requests`, which would wipe every sandbox's journal mid-check. (`mock_reset` in `_harness/scripts/lib.sh`, 2026-11-10)
-- `order.v1.placed` is consumed by the customer context but no context publishes it yet (`OrderPlaced` is recorded but has no integration mapping). To exercise its consumer live, publish it by hand (`_harness/scripts/kafka.sh publish ...`, or a scratch check with `--produce`). (2026-11-10)
+- No context publishes `order.v1.placed` yet (see `internal/order/CONTEXT.md`). To exercise customer's consumer live, publish it by hand (`_harness/scripts/kafka.sh publish ...`, or a scratch check with `--produce`). (2026-11-10)
 - Integration tests live next to their code (`*_integration_test.go`, `//go:build integration`). The migrate one must be the external `migrate_test` package: `testsupport/containers` imports `migrate`, so an internal test would be an import cycle. Each such package needs its own tagged `TestMain` calling `containers.RunMain`, and starts its own containers. Integration tests cover one adapter against real infra only; whole-app behavior is e2e's job (the in-process `testsupport.NewApp` profiles were removed as duplicates of e2e). (2026-11-11)
 
 - Exit 0 is not proof that something ran. Three quiet passes were closed on 2026-11-12: `go test -run <typo>` prints `ok ... [no tests to run]` (`e2e.sh` now fails it), a check file with a bash syntax error lost every check after the error, and a name regex matching nothing passed on a leftover e2e result (`check.sh` records `FAIL file:<name>` / `FAIL filter:<regex>`). A new gate needs the same question: what does it report when nothing ran? (`_harness/scripts/{e2e,check}.sh`)

@@ -37,7 +37,7 @@ export PATH=/snap/go/current/bin:$PATH   # needed: tests/arch shells out to `go 
 make GO=/snap/go/current/bin/go <target> # or pass GO= to make
 ```
 
-`go.mod` requires Go 1.27.1. `vendor/` exists locally but is gitignored, so
+`go.mod` requires Go 1.27.4. `vendor/` exists locally but is gitignored, so
 don't commit it. After changing dependencies, run `go mod tidy` (and
 `go mod vendor` if you keep the vendor dir).
 

@@ -19,7 +19,7 @@ changelog (that's git), or anything obvious from the code.
 - The snap `go` shim does run Go and returns its exit code, but its output is lost unless stdout is a pipe: `go version` prints nothing, `go version | cat` prints the version, and a failing `go build` exits 1 with no message. So a failure is silent, not hidden. Use `/snap/go/current/bin/go`, or pass `GO=/snap/go/current/bin/go` to make, to see the output. (`make`, 2026-10-28, corrected 2026-11-12)
 - `golangci-lint` v2.13.x fails on Go 1.27.3 with `typecheck: ... export data version 5 is greater than maximum supported version 4`. The bundled x/tools is too old, so rebuilding it from source with a newer Go doesn't help. The pin is now v2.15.0 (`scripts/install-tools.sh`). If this error comes back after a Go upgrade, bump the pin; it's a tool problem, not a code finding. (`scripts/check.sh`, 2026-10-31)
 - golangci-lint v2.15's errcheck flags a bare `<-errCh` on a `chan error`, and staticcheck S1005 flags `_ = <-errCh`. Handle the received error (e.g. log it unless it's `context.Canceled`). (`cmd/api/main.go`, 2026-10-31)
-- The `Dockerfile` builder image is `golang:1.26.7`, but `go.mod` requires 1.27.1. Bump the image if a Docker build fails on the toolchain. (`Dockerfile`, 2026-10-28)
+- The `Dockerfile` builder image (`golang:1.27.4`) is pinned by hand and is not read from `go.mod`. Bump both together on a Go upgrade; CI follows `go.mod` on its own. (`Dockerfile`, 2026-10-28, updated 2026-11-14)
 
 ## Config
 

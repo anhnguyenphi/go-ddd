@@ -46,11 +46,16 @@ reaction).
    undecodable payload, `--dead-letter`, and
    `--expect-errors '"msg":"event handler (failed|exhausted retries, sent to dead-letter topic)"'`
    (see `_harness/checks/example.sh.sample`).
-7. Run `quality-gate`, then `verify-live`.
+7. **Domain memory**: add the event to "Events consumed" in the consumer's
+   `internal/<ctx>/CONTEXT.md` (from which context, the reaction, how it is
+   idempotent), and the relationship to `docs/agent/context-map.md`.
+   `tests/arch/context_memory_test.go` fails until the event is listed.
+8. Run `quality-gate`, then `verify-live`.
 
 ## New event (producer side)
 
 Add the name constant and payload struct in the producer's
 `infrastructure/messaging/event_mappers.go`, map it in `ToIntegrationEvent`,
-pin it in `tests/contract`, and while developing, watch it with
+pin it in `tests/contract`, list it under "Events published" in the
+producer's `CONTEXT.md`, and while developing, watch it with
 `--events <name>@<id>` in a scratch check. A payload change that isn't additive needs a new `v2` name.

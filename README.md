@@ -20,6 +20,8 @@ internal/
   eventbus/          Transport-agnostic event bus + local/kafka/outbox impls
   bootstrap/         Composition root — wires everything together
   customer/          Fully implemented bounded context (reference slice)
+    CONTEXT.md       Domain memory: language, invariants, events, decisions
+                     (one per context; index in docs/agent/context-map.md)
     domain/          Aggregates, value objects, domain events, policies
     application/     Commands, queries, DTOs, ports
     infrastructure/  Persistence, messaging (mappers), projections

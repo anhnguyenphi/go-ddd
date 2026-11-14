@@ -43,7 +43,12 @@ Copy the customer context: `CreateCustomer` for a command, `GetCustomer` /
    the producer mapping in `infrastructure/messaging/event_mappers.go`, pin
    the payload in `tests/contract`, and add a topic to `HARNESS_TOPICS` if it
    belongs to a new context.
-8. Run `quality-gate`, then `verify-live`.
+8. **Domain memory**: read `internal/<ctx>/CONTEXT.md` before step 1 and name
+   the RPC, messages, and fields in its Language. Afterwards record what the
+   endpoint added: a new term, an invariant under Aggregates, an event under
+   Events published. `tests/arch/context_memory_test.go` fails on a new
+   aggregate or integration event that isn't listed.
+9. Run `quality-gate`, then `verify-live`.
 
 ## Gotchas
 

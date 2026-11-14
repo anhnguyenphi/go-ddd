@@ -19,9 +19,12 @@ Two kinds of tests, two jobs:
 
 ## 0. Memory and workspace
 
-Read `docs/agent/learnings.md` and the parts of
-`docs/agent/architecture.md` that the task touches. Check whether the
-problem is already recorded.
+Read `docs/agent/learnings.md`, `docs/agent/context-map.md`, the
+`internal/<ctx>/CONTEXT.md` of every context the task touches, and the parts
+of `docs/agent/architecture.md` that apply. Check whether the problem is
+already recorded. Use the context's own terms in the plan, the names, and the
+tests; if the task contradicts a recorded invariant or decision, say so
+before changing anything.
 
 Work in a dedicated git worktree when other features are in flight. The
 harness gives each worktree its own sandbox (`docs/agent/harness.md`), so
@@ -74,7 +77,10 @@ CHANGES REQUESTED, go back to step 2, then 3 and 4 again.
 
 ## 6. Memory and cleanup
 
-Run the `update-memory` skill for anything surprising you learned. When the
+Run the `update-memory` skill: domain changes (a term, an invariant, an
+event, a cross-context call, a decision and its reason, an open question
+answered) go into the context's `CONTEXT.md`, and anything surprising about
+tooling or the harness goes into `learnings.md`. When the
 worktree is done, `make harness-down ARGS=--purge` there (or
 `make harness-sandboxes ARGS=gc` after removing the worktree).
 
@@ -100,5 +106,5 @@ EVIDENCE: make harness-verify ARGS=--e2e -> PASS (sandbox <name>: e2e ok, <n>/<n
 NEW TESTS: <test/scenario names>
 TESTS CHANGED: <name: why it was wrong> | none
 REVIEW: APPROVE (<minor notes>)
-MEMORY: <entries added/edited> | none
+MEMORY: <CONTEXT.md / context-map.md / learnings.md entries added or edited> | none
 ```

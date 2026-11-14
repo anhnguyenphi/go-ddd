@@ -8,7 +8,7 @@ layer. The live harness has its own guide: [harness.md](harness.md).
 | Layer | Where | Tag | Infra | Command | What it buys |
 |---|---|---|---|---|---|
 | Unit | `internal/**/_test.go` | none | none | `make test` | Domain rules, handlers, adapters with fakes or mockery mocks |
-| Arch | `tests/arch` | none | none | `make test` | Layering rules, test-only packages kept out of prod, e2e stays black-box |
+| Arch | `tests/arch` | none | none | `make test` | Layering rules, test-only packages kept out of prod, e2e stays black-box, every context's `CONTEXT.md` matches its aggregates and integration events |
 | Contract | `tests/contract` | `contract` | none | `make test-contract` | Integration-event wire form pinned to golden files |
 | Integration | `*_integration_test.go` next to the adapter it tests | `integration` | testcontainers | `make test-integration` | One adapter against real Postgres 16 / Redpanda: SQL repositories and read models, migrations, Kafka delivery/retry/DLQ |
 | E2E | `tests/e2e` | `e2e` | a running deployment | `make test-e2e-harness` / `E2E_BASE_URL=... make test-e2e` | The whole app: black-box scenarios against the real binaries (harness, CI, staging) |

@@ -10,8 +10,9 @@ the repo.
 
 ## Before editing
 
-1. Read `AGENTS.md` (the rules, conventions, and toolchain gotcha) and
-   `docs/agent/learnings.md`.
+1. Read `AGENTS.md` (the rules, conventions, and toolchain gotcha),
+   `docs/agent/learnings.md`, and `internal/<ctx>/CONTEXT.md` of the context
+   you change (its language, invariants, and decisions).
 2. Read the files you'll touch, and one similar existing slice to copy from
    (`internal/customer` is the reference).
 3. If the task requires a new dependency, a contract change (an integration
@@ -25,6 +26,10 @@ the repo.
 - REST changes go in `api/proto/<ctx>/v1/*.proto`, followed by `make proto`.
   Never hand-edit generated code or `mocks/`. Use `make mocks` after
   adding an interface to `.mockery.yaml`.
+- Name things in the context's Language. When you add an aggregate, an
+  invariant, or an integration event, update that context's `CONTEXT.md` in
+  the same change (`tests/arch/context_memory_test.go` checks aggregates and
+  events).
 - Add focused unit tests for new logic, matching the style of neighboring
   tests. If the prompt names regression tests or scenarios to satisfy, make
   them pass. Don't modify a test to fit your code.

@@ -1,6 +1,6 @@
 ---
 name: implement-and-verify-loop
-description: Use for any task that changes behavior in this repo (a feature, a bug fix, a new endpoint, consumer, or migration). It orchestrates memory → failing tests + scratch checks first → implement → quality gate → live verify in the worktree's sandbox → review → memory, in a bounded loop, and finishes with evidence instead of a claim.
+description: Use for any task that changes behavior in this repo (a feature, a bug fix, a new endpoint, consumer, or migration). It orchestrates memory → failing tests + scratch checks first → implement → quality gate → live verify in the worktree's sandbox → review → memory → review brief, in a bounded loop, and finishes with evidence instead of a claim.
 ---
 
 # Implement and verify loop
@@ -34,7 +34,11 @@ parallel tasks never share ports, DBs, topics, or mocks.
 
 - Restate the acceptance criteria as observable effects: the status and body,
   the rows written, the events published, the outbound calls made or not
-  made, and the log lines.
+  made, and the log lines. Write them down now as the `PROBLEM` and
+  `CRITERIA` lines of the final report, before any code exists. Carry them
+  forward unchanged; if a criterion changes later, say so in the report. If
+  the request gave no explicit criteria, write them yourself and mark them
+  `(written by the agent)`.
 - **Regression tests**, written before the code (see
   `docs/agent/testing.md` → "Where does my test go?"): a scenario for anything
   a client sees (run by e2e), a handler unit test for side effects, the
@@ -75,13 +79,39 @@ and returns PASS / FAIL / HARNESS ERROR with evidence.
 Hand the `reviewer` subagent the changed files and the diff. If it reports
 CHANGES REQUESTED, go back to step 2, then 3 and 4 again.
 
-## 6. Memory and cleanup
+## 6. Memory
 
 Run the `update-memory` skill: domain changes (a term, an invariant, an
 event, a cross-context call, a decision and its reason, an open question
 answered) go into the context's `CONTEXT.md`, and anything surprising about
-tooling or the harness goes into `learnings.md`. When the
-worktree is done, `make harness-down ARGS=--purge` there (or
+tooling or the harness goes into `learnings.md`.
+
+## 7. Review brief
+
+Only when the result is `done`. On `blocked` there is no brief. The brief is
+a reading aid for a reviewer who did not see this session. It is not a gate
+and not part of the definition of done: skipping it never changes `RESULT`.
+
+- Fill [brief-template.md](brief-template.md) from the final report fields
+  and write it to `tmp/review-brief.md` (gitignored). Give every criterion a
+  proof grade from the template.
+- Show the brief to the user and ask whether to commit with it. Commit only
+  after they approve, with their edits:
+  `git commit -F tmp/review-brief.md`. Stage the files of this change by
+  path, memory edits included; never `git add -A`. Never amend, push, or open
+  a pull request.
+- Do not offer the commit when HEAD is the default branch, when the branch
+  already has commits of its own (GitHub then copies no body into the pull
+  request), or when you cannot tell which uncommitted files belong to the
+  change. Report the brief and the reason instead.
+- With parallel implementers, write the brief only in the worktree that holds
+  the combined result, after steps 3 to 5 passed there.
+- A review fix after the brief is committed is a new commit. Leave the brief
+  alone.
+
+## 8. Cleanup
+
+When the worktree is done, `make harness-down ARGS=--purge` there (or
 `make harness-sandboxes ARGS=gc` after removing the worktree).
 
 ## Bounds
@@ -99,6 +129,9 @@ worktree is done, `make harness-down ARGS=--purge` there (or
 
 ```
 RESULT: done | blocked
+PROBLEM: <what was wrong or missing, 2 to 4 sentences; written at step 1>
+CRITERIA: <n> criteria: <a> committed test, <b> seen live only, <c> NOT VERIFIED
+          1. <observable effect; written at step 1> -> <proof grade: path and test name | assertion | NOT VERIFIED>
 CHANGE: <one paragraph>
 EVIDENCE: make harness-verify ARGS=--e2e -> PASS (sandbox <name>: e2e ok, <n>/<n> checks, 0 unmatched, 0 unexpected errors)
           scripts/check.sh -> OK
@@ -107,4 +140,5 @@ NEW TESTS: <test/scenario names>
 TESTS CHANGED: <name: why it was wrong> | none
 REVIEW: APPROVE (<minor notes>)
 MEMORY: <CONTEXT.md / context-map.md / learnings.md entries added or edited> | none
+BRIEF: committed <sha> | tmp/review-brief.md, not committed: <reason> | none (blocked)
 ```

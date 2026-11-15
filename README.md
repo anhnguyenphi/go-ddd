@@ -325,4 +325,7 @@ make harness-down ARGS=--purge                   # drop this sandbox
 
 [docs/agent/harness.md](docs/agent/harness.md) covers the sandbox model, the
 pipeline, the check DSL, and how to extend the harness. The `verify-live` and
-`implement-and-verify-loop` skills say when and how an agent uses it.
+`implement-and-verify-loop` skills say when and how an agent uses it. The loop
+ends with a review brief (problem, acceptance criteria and the test that
+proves each, solution) that becomes the commit body, and so the pull request
+description, once the author approves it.

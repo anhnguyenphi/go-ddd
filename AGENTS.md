@@ -141,12 +141,18 @@ trusting a `harness-check` or `harness-e2e` result.
 8. Anything surprising about tooling, config, tests, or the harness is
    recorded in `docs/agent/learnings.md`. Both memories: skill `update-memory`.
 
+The review brief that ends the work loop is outside this list. It is a
+reading aid for the reviewer, not a gate.
+
 ## Work loop
 
 For any change in behavior, follow the `implement-and-verify-loop` skill:
 read memory (learnings and the domain memory), then write the failing tests (and scratch checks) first, then
 implement, then run the quality gate, then verify live in your sandbox, then
-review, then update memory. Allow at
+review, then update memory, then write the review brief (the problem, the
+acceptance criteria with the committed test that proves each, and the
+solution) and commit with it as the body only after the user approves. Never
+amend, push, or open a pull request unasked. Allow at
 most **5** fix iterations, and act on new evidence each time. If the same
 failure shows up twice, stop editing code. Inspect the DB, mocks, events, or
 logs directly instead.

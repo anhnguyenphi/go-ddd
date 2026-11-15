@@ -97,7 +97,8 @@ and not part of the definition of done: skipping it never changes `RESULT`.
   proof grade from the template.
 - Show the brief to the user and ask whether to commit with it. Commit only
   after they approve, with their edits:
-  `git commit -F tmp/review-brief.md`. Stage the files of this change by
+  `git commit -F tmp/review-brief.md` (`-F` keeps the Markdown `##`
+  headings; an editor would strip them). Stage the files of this change by
   path, memory edits included; never `git add -A`. Never amend, push, or open
   a pull request.
 - Do not offer the commit when HEAD is the default branch, when the branch

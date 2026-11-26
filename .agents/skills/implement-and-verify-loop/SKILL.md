@@ -101,6 +101,9 @@ and not part of the definition of done: skipping it never changes `RESULT`.
   headings; an editor would strip them). Stage the files of this change by
   path, memory edits included; never `git add -A`. Never amend, push, or open
   a pull request.
+- Pushing and opening the pull request happen only when the user asks, through
+  the `open-pr` skill. It re-runs the harness on the committed tree and posts
+  the report as a PR comment.
 - Do not offer the commit when HEAD is the default branch, when the branch
   already has commits of its own (GitHub then copies no body into the pull
   request), or when you cannot tell which uncommitted files belong to the

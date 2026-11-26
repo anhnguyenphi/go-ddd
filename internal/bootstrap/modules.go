@@ -45,9 +45,11 @@ func newModules(logger *slog.Logger, p persistence, outboxPub eventbus.Publisher
 		// the customerv1 gRPC contract — see infrastructure/customerclient
 		// for why (a request/response cross-context call, not an event).
 		order: order.New(order.Deps{
-			Clock:    clock.System{},
-			IDs:      id.UUID{},
-			Customer: customerclient.New(customerMod.GRPC()),
+			UnitOfWork:      p.unitOfWork,
+			OutboxPublisher: outboxPub,
+			Clock:           clock.System{},
+			IDs:             id.UUID{},
+			Customer:        customerclient.New(customerMod.GRPC()),
 		}),
 	}
 }

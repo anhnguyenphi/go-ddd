@@ -303,6 +303,19 @@
       "properties": {
         "customer_id": {
           "type": "string"
+        },
+        "product_name": {
+          "type": "string",
+          "description": "What is bought. Required, not blank."
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64",
+          "description": "What the customer pays, in minor units of currency (1999 = 19.99 EUR).\nRequired, \u003e 0."
+        },
+        "currency": {
+          "type": "string",
+          "description": "ISO 4217 code, three uppercase letters (EUR, USD). Required."
         }
       }
     },

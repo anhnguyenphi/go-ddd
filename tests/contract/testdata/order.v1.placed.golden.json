@@ -1,0 +1,14 @@
+{
+  "name": "order.v1.placed",
+  "source": "order",
+  "version": 1,
+  "aggregate_id": "o-1",
+  "occurred_at": "2026-01-02T03:04:05Z",
+  "payload": {
+    "id": "o-1",
+    "customer_id": "c-1",
+    "product_name": "Coffee beans",
+    "amount": 1999,
+    "currency": "EUR"
+  }
+}

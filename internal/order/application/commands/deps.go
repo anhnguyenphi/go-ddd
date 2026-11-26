@@ -14,6 +14,8 @@ import (
 // in the bootstrap, never referenced here.
 type Deps struct {
 	Repo     domain.Repository
+	UoW      sharedapp.UnitOfWork
+	Events   sharedapp.DomainEventPublisher
 	Clock    sharedapp.Clock
 	IDs      sharedapp.IDGenerator
 	Customer application.CustomerVerifier

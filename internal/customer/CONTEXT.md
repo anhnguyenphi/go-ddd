@@ -86,8 +86,9 @@ Dates are when the decision was recorded here, not when it was made.
 - Nothing calls `Customer.Deactivate`: there is no command or RPC for it, so
   `customer.v1.deactivated` is mapped and pinned but never emitted in the
   running app.
-- `order.v1.placed` has a consumer here but no producer (see
-  `internal/order/CONTEXT.md`). What should the reaction be: mark the customer
-  as "converted"?
+- What should the reaction to `order.v1.placed` be: mark the customer as
+  "converted"? Its payload (`id`, `customer_id`, `product_name`, `amount`,
+  `currency`) is published by order since 2026-11-26; see
+  `internal/order/CONTEXT.md`.
 - Should the read model say `deactivated` like the write side, instead of
   `inactive`? Changing it changes the API response.

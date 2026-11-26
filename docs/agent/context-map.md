@@ -21,7 +21,7 @@ page doesn't link it. Update the files with the `update-memory` skill.
 | Context | Owns | Status | Memory |
 |---|---|---|---|
 | customer | Who a customer is: identity, name, email, lifecycle | Reference slice | [internal/customer/CONTEXT.md](../../internal/customer/CONTEXT.md) |
-| order | Orders placed by customers | Partial (`PlaceOrder` only) | [internal/order/CONTEXT.md](../../internal/order/CONTEXT.md) |
+| order | Orders placed by customers: one product for one amount | Partial (`PlaceOrder` only, publishes `order.v1.placed`) | [internal/order/CONTEXT.md](../../internal/order/CONTEXT.md) |
 | notification | Telling people things (welcome messages) | Consumer slice, no state | [internal/notification/CONTEXT.md](../../internal/notification/CONTEXT.md) |
 | identity | Users, credentials, access | Placeholder | [internal/identity/CONTEXT.md](../../internal/identity/CONTEXT.md) |
 | payment | Money taken for orders | Placeholder | [internal/payment/CONTEXT.md](../../internal/payment/CONTEXT.md) |
@@ -37,7 +37,7 @@ Upstream decides the contract; downstream conforms to it.
 |---|---|---|---|
 | customer → notification | Async, published language | `customer.v1.created` | Live |
 | customer → order | Sync, customer/supplier. Order calls through its own port and an anti-corruption adapter (`order/infrastructure/customerclient`) | `customerv1.CustomerService/GetCustomer` | Live |
-| order → customer | Async, published language | `order.v1.placed` | Consumer only: nothing publishes it yet |
+| order → customer | Async, published language | `order.v1.placed` | Live (customer only logs it) |
 
 Contexts never import each other (`tests/arch/layering_test.go`). They share
 only `api/proto/*/v1` and integration event names with their payload shapes.

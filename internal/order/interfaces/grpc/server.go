@@ -28,7 +28,12 @@ func NewServer(placeOrder *commands.PlaceOrderHandler) *Server {
 }
 
 func (s *Server) PlaceOrder(ctx context.Context, req *orderv1.PlaceOrderRequest) (*orderv1.PlaceOrderResponse, error) {
-	res, err := s.placeOrder.Handle(ctx, commands.PlaceOrder{CustomerID: req.GetCustomerId()})
+	res, err := s.placeOrder.Handle(ctx, commands.PlaceOrder{
+		CustomerID:  req.GetCustomerId(),
+		ProductName: req.GetProductName(),
+		Amount:      req.GetAmount(),
+		Currency:    req.GetCurrency(),
+	})
 	if err != nil {
 		return nil, mapError(err)
 	}

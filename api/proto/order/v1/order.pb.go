@@ -25,8 +25,15 @@ const (
 )
 
 type PlaceOrderRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CustomerId    string                 `protobuf:"bytes,1,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	CustomerId string                 `protobuf:"bytes,1,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
+	// What is bought. Required, not blank.
+	ProductName string `protobuf:"bytes,2,opt,name=product_name,json=productName,proto3" json:"product_name,omitempty"`
+	// What the customer pays, in minor units of currency (1999 = 19.99 EUR).
+	// Required, > 0.
+	Amount int64 `protobuf:"varint,3,opt,name=amount,proto3" json:"amount,omitempty"`
+	// ISO 4217 code, three uppercase letters (EUR, USD). Required.
+	Currency      string `protobuf:"bytes,4,opt,name=currency,proto3" json:"currency,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -64,6 +71,27 @@ func (*PlaceOrderRequest) Descriptor() ([]byte, []int) {
 func (x *PlaceOrderRequest) GetCustomerId() string {
 	if x != nil {
 		return x.CustomerId
+	}
+	return ""
+}
+
+func (x *PlaceOrderRequest) GetProductName() string {
+	if x != nil {
+		return x.ProductName
+	}
+	return ""
+}
+
+func (x *PlaceOrderRequest) GetAmount() int64 {
+	if x != nil {
+		return x.Amount
+	}
+	return 0
+}
+
+func (x *PlaceOrderRequest) GetCurrency() string {
+	if x != nil {
+		return x.Currency
 	}
 	return ""
 }
@@ -116,10 +144,13 @@ var File_order_v1_order_proto protoreflect.FileDescriptor
 
 const file_order_v1_order_proto_rawDesc = "" +
 	"\n" +
-	"\x14order/v1/order.proto\x12\border.v1\x1a\x1cgoogle/api/annotations.proto\"4\n" +
+	"\x14order/v1/order.proto\x12\border.v1\x1a\x1cgoogle/api/annotations.proto\"\x8b\x01\n" +
 	"\x11PlaceOrderRequest\x12\x1f\n" +
 	"\vcustomer_id\x18\x01 \x01(\tR\n" +
-	"customerId\"$\n" +
+	"customerId\x12!\n" +
+	"\fproduct_name\x18\x02 \x01(\tR\vproductName\x12\x16\n" +
+	"\x06amount\x18\x03 \x01(\x03R\x06amount\x12\x1a\n" +
+	"\bcurrency\x18\x04 \x01(\tR\bcurrency\"$\n" +
 	"\x12PlaceOrderResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id2r\n" +
 	"\fOrderService\x12b\n" +

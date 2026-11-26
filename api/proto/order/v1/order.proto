@@ -26,6 +26,13 @@ service OrderService {
 
 message PlaceOrderRequest {
   string customer_id = 1;
+  // What is bought. Required, not blank.
+  string product_name = 2;
+  // What the customer pays, in minor units of currency (1999 = 19.99 EUR).
+  // Required, > 0.
+  int64 amount = 3;
+  // ISO 4217 code, three uppercase letters (EUR, USD). Required.
+  string currency = 4;
 }
 
 message PlaceOrderResponse {

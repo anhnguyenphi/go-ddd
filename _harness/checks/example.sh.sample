@@ -44,5 +44,5 @@ check --name worker-poison-message-dead-lettered \
 # A broken downstream (once a context calls one; there are none yet):
 #   mock_scenario payments error
 #   check --name order-payments-down --method POST --path /api/v1/orders \
-#   	--body '{"customer_id":"harness-cust-0001"}' --status 502 --no-events
+#   	--body '{"customer_id":"harness-cust-0001","product_name":"Tea","amount":450,"currency":"USD"}' --status 502 --no-events
 #   mock_clear_scenarios

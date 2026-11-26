@@ -18,9 +18,11 @@ import (
 	"google.golang.org/grpc"
 
 	orderv1 "github.com/example/myapp/api/proto/order/v1"
+	"github.com/example/myapp/internal/eventbus"
 	"github.com/example/myapp/internal/order/application"
 	"github.com/example/myapp/internal/order/application/commands"
 	"github.com/example/myapp/internal/order/domain"
+	"github.com/example/myapp/internal/order/infrastructure/messaging"
 	"github.com/example/myapp/internal/order/infrastructure/persistence/memory"
 	ordergrpc "github.com/example/myapp/internal/order/interfaces/grpc"
 	sharedapp "github.com/example/myapp/internal/shared/application"
@@ -29,8 +31,11 @@ import (
 // Deps are the infrastructure choices the bootstrap injects.
 type Deps struct {
 	Repository domain.Repository // optional; defaults to an in-memory repo
-	Clock      sharedapp.Clock
-	IDs        sharedapp.IDGenerator
+	UnitOfWork sharedapp.UnitOfWork
+	// OutboxPublisher receives order's integration events (order.v1.placed).
+	OutboxPublisher eventbus.Publisher
+	Clock           sharedapp.Clock
+	IDs             sharedapp.IDGenerator
 	// Customer is the synchronous port onto the customer context — see
 	// application/ports.go and infrastructure/customerclient.
 	Customer application.CustomerVerifier
@@ -49,6 +54,8 @@ func New(d Deps) *Module {
 	}
 	placeOrder := commands.NewPlaceOrderHandler(commands.Deps{
 		Repo:     repo,
+		UoW:      d.UnitOfWork,
+		Events:   messaging.NewDispatcher(d.OutboxPublisher),
 		Clock:    d.Clock,
 		IDs:      d.IDs,
 		Customer: d.Customer,

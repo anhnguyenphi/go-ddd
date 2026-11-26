@@ -165,9 +165,9 @@ on (`:9090`), transcoded to REST on `:8080` exactly like customer:
 ```bash
 curl -sS -XPOST localhost:8080/api/v1/orders \
   -H 'content-type: application/json' \
-  -d '{"customer_id":"<id-from-creating-a-customer-above>"}' | jq
+  -d '{"customer_id":"<id-from-creating-a-customer-above>","product_name":"Coffee beans","amount":1999,"currency":"EUR"}' | jq
 
-grpcurl -plaintext -d '{"customer_id":"<id-from-creating-a-customer-above>"}' \
+grpcurl -plaintext -d '{"customer_id":"<id-from-creating-a-customer-above>","product_name":"Coffee beans","amount":1999,"currency":"EUR"}' \
   localhost:9090 order.v1.OrderService/PlaceOrder
 ```
 

@@ -1,13 +1,19 @@
 # Review brief template
 
-The review brief is the body of the commit that holds a finished change.
-GitHub copies the body of a single-commit branch into the pull request
-description, so a reviewer who did not see the agent session can read it
-there. It is a reading aid, not a gate: it never changes `RESULT`.
+The review brief is the body of the commit that holds a finished change, and
+the description of its pull request (the `open-pr` skill passes it to
+`gh pr create`). It is for a reviewer who did not see the agent session. It
+is a reading aid, not a gate: it never changes `RESULT`.
+
+The brief answers two questions: **what must be true** (the acceptance
+criteria) and **how the change makes it true** (the solution). It does not
+carry the harness run. `open-pr` posts the sandbox report for the pushed
+commit as a PR comment, and CI reruns it. Don't paste the run results,
+exit codes, or a `## Proof` section into the brief.
 
 Fill the template from the final report fields. Do not write new claims here:
-`Problem` is `PROBLEM`, the criteria are `CRITERIA`, `Solution` is `CHANGE`,
-and the local line under `Proof` is `EVIDENCE`.
+`Problem` is `PROBLEM`, the criteria are `CRITERIA`, and `Solution` expands
+`CHANGE`.
 
 ````
 <subject: what the change does, imperative, at most 72 characters>
@@ -29,27 +35,27 @@ and the local line under `Proof` is `EVIDENCE`.
 
 ## Solution
 
-<CHANGE: one paragraph. What was changed and where.>
+<CHANGE, expanded: 2 to 5 sentences on the approach. Describe the path a request or
+event now takes, in the context's terms, and which criterion each part serves.>
 
-## Proof
+Key decisions:
 
-- Local, on the working tree before this commit was created:
-  `make harness-verify ARGS=--e2e` -> PASS (e2e ok, 0 unmatched, 0 unexpected errors);
-  `scripts/check.sh` -> OK
-- Independent: the CI "e2e" job on the pull request reruns the harness on
-  the pushed commit. CI also reruns every committed test cited above.
+- <decision>: <why this way, and the alternative you didn't take>
 
-Written by the coding agent that made the change. Not independently checked.
+Where to look:
+
+- `<path>`: <what changed there, in one line>
+
+Not in this change: <what a reviewer might expect that isn't here, and why> | nothing
 ````
 
 ## Proof grades
 
-Each criterion carries exactly one grade.
+Each criterion carries exactly one grade. The grade says what pins the
+criterion. It is not a log of what ran.
 
 - **committed test**: a Go test or scenario in this change, cited by file
-  path and name so a reader can open it. For a test the harness report does
-  not show (unit, contract, integration), add the command that ran it and its
-  result, for example `(make test -> ok)`.
+  path and name so a reader can open it.
 - **seen live only, not in this PR**: a scratch check showed the effect.
   Scratch checks are gitignored and are not evidence of coverage, so write out
   the assertion in one line and do not cite the check by name. For a behavior
@@ -64,6 +70,10 @@ Each criterion carries exactly one grade.
   changed during the work, add a line under it: `Changed: <from> -> <to>, <why>`.
 - If the task request gave no explicit criteria, add `(written by the agent)`
   to the count line.
+- The solution explains reasons. A reader can get the "what" from the diff,
+  so spend the words on the "why": each key decision names its reason.
+  "Where to look" lists only the files that carry the logic, in reading
+  order, and leaves out mechanical edits (generated code, mocks, wiring).
 - Restate the request. Do not quote the session, and do not write "as
   discussed" or "the user asked": the text stays in git history.
 - The body is Markdown, because GitHub renders the pull request description:
@@ -77,4 +87,4 @@ Each criterion carries exactly one grade.
   deleted.
 - Nothing a reader cannot reach: no sandbox name, no scratch check name, no
   `tmp/` path, no local SHA with `(dirty)`.
-- Keep it under about 40 lines.
+- Keep it under about 50 lines.

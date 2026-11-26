@@ -152,7 +152,8 @@ implement, then run the quality gate, then verify live in your sandbox, then
 review, then update memory, then write the review brief (the problem, the
 acceptance criteria with the committed test that proves each, and the
 solution) and commit with it as the body only after the user approves. Never
-amend, push, or open a pull request unasked. Allow at
+amend, push, or open a pull request unasked (when the user asks,
+use the `open-pr` skill). Allow at
 most **5** fix iterations, and act on new evidence each time. If the same
 failure shows up twice, stop editing code. Inspect the DB, mocks, events, or
 logs directly instead.
@@ -169,7 +170,8 @@ Subagents (`.agents/agents/`):
 
 Skills (`.agents/skills/`):
 `implement-and-verify-loop`, `verify-live`, `quality-gate`, `add-endpoint`,
-`add-consumer`, `add-downstream-stub`, `add-migration`, `update-memory`.
+`add-consumer`, `add-downstream-stub`, `add-migration`, `update-memory`,
+`open-pr` (user-invoked only: commit, push, PR, and a harness proof comment).
 
 ## Architecture essentials
 
